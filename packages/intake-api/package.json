@@ -1,0 +1,6 @@
+{
+  "name": "@pi/intake-api",
+  "private": true,
+  "type": "module",
+  "main": "./src/server.js"
+}

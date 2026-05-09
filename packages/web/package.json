@@ -1,0 +1,6 @@
+{
+  "name": "@pi/web",
+  "private": true,
+  "type": "module",
+  "main": "./src/server.js"
+}

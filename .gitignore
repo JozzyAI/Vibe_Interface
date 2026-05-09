@@ -1,0 +1,30 @@
+# Runtime artifacts and logs
+artifacts/
+*.log
+*.pid
+
+# Session persistence data (runtime-generated)
+data/
+
+# Build outputs and caches
+.next/
+dist/
+node_modules/
+*.tsbuildinfo
+
+# Local environment and personal config
+.npmrc
+.env
+.env.*
+.env.*.local
+
+# Claude Code local settings
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Private planning notes
+_private_notes/
+.local_notes/
