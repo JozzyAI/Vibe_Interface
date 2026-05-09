@@ -19,21 +19,21 @@ SERVER="${server}"
 CODE="${enrollment.code}"
 PACKAGE_URL="${packageUrl}"
 
-if ! command -v pi-remote-bridge >/dev/null 2>&1; then
+if ! command -v pi-agent >/dev/null 2>&1; then
   if ! command -v python3 >/dev/null 2>&1; then
-    echo "python3 is required to install pi-remote-bridge."
+    echo "python3 is required to install pi-agent."
     exit 1
   fi
   if ! command -v pip3 >/dev/null 2>&1 && ! python3 -m pip --version >/dev/null 2>&1; then
-    echo "pip is required to install pi-remote-bridge."
+    echo "pip is required to install pi-agent."
     exit 1
   fi
-  echo "Installing pi-remote-bridge from PI..."
+  echo "Installing pi-agent from PI..."
   python3 -m pip install --user "$PACKAGE_URL"
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
-exec pi-remote-bridge pair --server "$SERVER" --code "$CODE" --start
+exec pi-agent pair --server "$SERVER" --code "$CODE" --start
 `;
     return new Response(script, {
       status: 200,

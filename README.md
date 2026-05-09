@@ -49,6 +49,17 @@ TypeScript library. Owns all PI business logic:
 
 Standalone WebSocket relay broker. Remote agents connect here when they cannot reach the PI dashboard directly. Only dependency: `ws`.
 
+### `bridges/pi-agent` — `pi-agent` (Python CLI)
+
+Remote agent client. Install this on any machine that will run agent jobs. It pairs with PI via a one-time connect code, keeps a background daemon alive, streams job output, and routes approval requests back to the dashboard.
+
+```bash
+pip install -e bridges/pi-agent
+pi-agent pair --server http://YOUR_PI_HOST:3000 --code ABCD1234 --start
+```
+
+See [`bridges/pi-agent/README.md`](bridges/pi-agent/README.md) for full usage.
+
 ### `packages/web` — `@pi/web`
 
 Next.js 15 dashboard. All pages are server-rendered where possible, client-polled every 5 seconds for live updates.

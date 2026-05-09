@@ -9,7 +9,7 @@ const PI_SESSION_INSTRUCTIONS = `
 
 PI hook: host-side blockers belong in a separate PI utility session, not repo edits.
 For GitHub login, Codex upgrades/restarts, host tool installs, browser login, or machine setup, run:
-pi-remote-bridge request-pi-session --title "Short title" --message "What is needed and why" --command "host command or script"
+pi-agent request-pi-session --title "Short title" --message "What is needed and why" --command "host command or script"
 `;
 
 function withPiHookInstructions(prompt?: string): string | undefined {
@@ -28,7 +28,7 @@ function buildProviderCommand(input: {
   model?: string;
   reasoningEffort?: string;
 }): string[] {
-  const command = ["pi-remote-bridge", input.provider];
+  const command = ["pi-agent", input.provider];
   if (input.binary?.trim()) {
     command.push("--binary", input.binary.trim());
   }

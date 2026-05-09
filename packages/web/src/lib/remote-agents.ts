@@ -321,7 +321,7 @@ function buildCodexResumeCommand(
   options: { model?: string | null; reasoningEffort?: string | null } = {},
 ): string[] {
   return [
-    "pi-remote-bridge",
+    "pi-agent",
     "codex",
     "--cwd",
     cwd,
@@ -391,10 +391,10 @@ function buildRalphIterationCommand(
   const prompt = buildRalphIterationPrompt(job, iteration);
   const toolType = agent?.toolType.toLowerCase() ?? "";
   if (toolType.includes("claude")) {
-    return ["pi-remote-bridge", "claude", "--cwd", cwd, "--", prompt];
+    return ["pi-agent", "claude", "--cwd", cwd, "--", prompt];
   }
   return [
-    "pi-remote-bridge",
+    "pi-agent",
     "codex",
     "--cwd",
     cwd,
@@ -1570,9 +1570,9 @@ export async function continueRemoteAgentJobOnMachine(input: {
   const provider = targetAgent.toolType.toLowerCase().includes("claude") ? "claude" : "codex";
   const command =
     provider === "claude"
-      ? ["pi-remote-bridge", "claude", "--cwd", cwd, "--", prompt]
+      ? ["pi-agent", "claude", "--cwd", cwd, "--", prompt]
       : [
-          "pi-remote-bridge",
+          "pi-agent",
           "codex",
           "--cwd",
           cwd,

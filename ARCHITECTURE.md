@@ -132,7 +132,7 @@ Session artifacts (written by the agent via the PI control plane API) live in `~
 ## Remote agent protocol
 
 1. User generates enrollment token on the Machines page
-2. Remote machine runs `pi-remote-bridge` (Python) or any WebSocket client that speaks the PI job protocol
+2. Remote machine runs `pi-agent` (Python CLI in `bridges/pi-agent/`) or any WebSocket client that speaks the PI job protocol
 3. Agent connects to relay or PI dashboard WebSocket directly
 4. PI dispatches jobs; agent streams output back; approval requests flow through the same channel
 
