@@ -6,8 +6,8 @@
     "packages/*"
   ],
   "scripts": {
-    "demo:core": "node ./packages/core/src/demo.js",
-    "dev:intake": "node ./packages/intake-api/src/server.js",
-    "dev:web": "node ./packages/web/src/server.js"
+    "build": "pnpm --filter @pi/core build && pnpm --filter @pi/relay build && pnpm --filter @pi/web build",
+    "dev": "pnpm --filter @pi/web dev",
+    "typecheck": "pnpm --filter @pi/core typecheck && pnpm --filter @pi/web typecheck"
   }
 }

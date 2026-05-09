@@ -9,8 +9,12 @@ data/
 # Build outputs and caches
 .next/
 dist/
+dist-server/
 node_modules/
 *.tsbuildinfo
+
+# PI runtime data
+pi-remote-agents/
 
 # Local environment and personal config
 .npmrc
