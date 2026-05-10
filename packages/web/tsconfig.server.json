@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "outDir": "dist-server",
+    "rootDir": "server",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false
+  },
+  "include": ["server"],
+  "exclude": ["server/__tests__"]
+}

@@ -59,16 +59,24 @@ function defaultWorkspace(root: string, prompt: string, title: string): string {
 
 const CODEX_MODEL_OPTIONS = [
   { value: "", label: "Codex default" },
+  { value: "gpt-5.5", label: "gpt-5.5" },
   { value: "gpt-5.4", label: "gpt-5.4" },
   { value: "gpt-5.4-mini", label: "gpt-5.4-mini" },
   { value: "gpt-5.3-codex", label: "gpt-5.3-codex" },
-  { value: "gpt-5.2", label: "gpt-5.2" },
-  { value: "gpt-5.5", label: "gpt-5.5" },
   { value: "gpt-5.2-codex", label: "gpt-5.2-codex" },
-  { value: "gpt-5-codex", label: "gpt-5-codex" },
   { value: "gpt-5.2-pro", label: "gpt-5.2-pro" },
+  { value: "gpt-5.2", label: "gpt-5.2" },
+  { value: "gpt-5-codex", label: "gpt-5-codex" },
   { value: "gpt-5-mini", label: "gpt-5-mini" },
-  { value: "__custom", label: "Custom model..." },
+];
+
+const CLAUDE_MODEL_OPTIONS = [
+  { value: "", label: "Default (claude-sonnet-4-6)" },
+  { value: "claude-opus-4-7", label: "claude-opus-4-7" },
+  { value: "claude-sonnet-4-6", label: "claude-sonnet-4-6" },
+  { value: "claude-haiku-4-5-20251001", label: "claude-haiku-4-5" },
+  { value: "claude-opus-4-5", label: "claude-opus-4-5" },
+  { value: "claude-sonnet-4-5", label: "claude-sonnet-4-5" },
 ];
 
 const REASONING_OPTIONS = [
@@ -79,6 +87,9 @@ const REASONING_OPTIONS = [
   { value: "xhigh", label: "XHigh" },
 ];
 
+interface BrowseEntry { name: string; isDir: boolean; }
+interface BrowseResult { path: string; agentRoot: string; entries: BrowseEntry[]; }
+
 export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props) {
   const [overview, setOverview] = useState(initialRemoteOverview);
   const [selectedAgentId, setSelectedAgentId] = useState("");
@@ -86,15 +97,25 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props
   const [prompt, setPrompt] = useState("");
   const [workspace, setWorkspace] = useState(workspaceRoot);
   const [permissionMode, setPermissionMode] = useState<PIApprovalPermissionMode>("manual");
+  const [provider, setProvider] = useState<"claude" | "codex">("claude");
   const [model, setModel] = useState("");
-  const [customModel, setCustomModel] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState("");
+  const modelOptions = provider === "claude" ? CLAUDE_MODEL_OPTIONS : CODEX_MODEL_OPTIONS;
   const [ralphEnabled, setRalphEnabled] = useState(false);
   const [autoResumeUsageLimit, setAutoResumeUsageLimit] = useState(false);
   const [autoRestartCodex, setAutoRestartCodex] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Folder browser state
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [browsePath, setBrowsePath] = useState<string | null>(null);
+  const [browseEntries, setBrowseEntries] = useState<BrowseEntry[]>([]);
+  const [browseRoot, setBrowseRoot] = useState<string | null>(null);
+  const [browseError, setBrowseError] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [showNewFolder, setShowNewFolder] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -116,8 +137,59 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props
   }, [connectedMachines, selectedAgentId]);
 
   const selectedAgent = connectedMachines.find((agent) => agent.agentId === selectedAgentId);
+  const agentDefaultRoot = selectedAgent?.worktree ?? selectedAgent?.repoRoot ?? null;
+
+  // When selected agent changes, update workspace default to agent's root
+  useEffect(() => {
+    if (agentDefaultRoot) setWorkspace(agentDefaultRoot);
+  }, [agentDefaultRoot]);
+
+  // Reset model when provider changes
+  useEffect(() => {
+    setModel("");
+  }, [provider]);
+
+  // Folder browser helpers
+  const loadBrowse = async (agentId: string, path?: string) => {
+    setBrowseError(null);
+    try {
+      const url = path
+        ? `/api/remote-agents/agents/${encodeURIComponent(agentId)}/browse?path=${encodeURIComponent(path)}`
+        : `/api/remote-agents/agents/${encodeURIComponent(agentId)}/browse`;
+      const result = await requestJson<BrowseResult>(url);
+      setBrowsePath(result.path);
+      setBrowseRoot(result.agentRoot);
+      setBrowseEntries(result.entries);
+    } catch (err) {
+      setBrowseError(err instanceof Error ? err.message : "Failed to browse");
+    }
+  };
+
+  const openBrowser = () => {
+    if (!selectedAgent) return;
+    setBrowseOpen(true);
+    setShowNewFolder(false);
+    setNewFolderName("");
+    void loadBrowse(selectedAgent.agentId);
+  };
+
+  const createFolder = async () => {
+    if (!selectedAgent || !browsePath || !newFolderName.trim()) return;
+    try {
+      const result = await requestJson<{ path: string }>(
+        `/api/remote-agents/agents/${encodeURIComponent(selectedAgent.agentId)}/browse`,
+        { method: "POST", body: JSON.stringify({ parent: browsePath, name: newFolderName.trim() }) },
+      );
+      setNewFolderName("");
+      setShowNewFolder(false);
+      void loadBrowse(selectedAgent.agentId, result.path);
+    } catch (err) {
+      setBrowseError(err instanceof Error ? err.message : "Failed to create folder");
+    }
+  };
+
   const effectiveTitle = title.trim() || titleFromPrompt(prompt);
-  const effectiveModel = model === "__custom" ? customModel.trim() : model;
+  const effectiveModel = model;
 
   const startSession = () =>
     startTransition(() => {
@@ -143,14 +215,14 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props
             method: "POST",
             body: JSON.stringify({
               agentId: selectedAgent.agentId,
-              provider: selectedAgent.toolType.toLowerCase().includes("claude") ? "claude" : "codex",
+              provider,
               cwd,
               title: effectiveTitle,
               prompt: [
                 "Start a new PI-managed coding session.",
                 `Workspace folder: ${cwd}`,
                 `Permission mode: ${permissionLabel(permissionMode)}`,
-                effectiveModel ? `Codex model: ${effectiveModel}` : "Codex model: default.",
+                effectiveModel ? `Model: ${effectiveModel}` : "Model: default.",
                 reasoningEffort ? `Thinking effort: ${reasoningEffort}` : "Thinking effort: default.",
                 ralphEnabled
                   ? [
@@ -251,18 +323,29 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props
             >
               {connectedMachines.map((agent: RemoteAgentSummary) => (
                 <option key={agent.agentId} value={agent.agentId}>
-                  {agent.displayName} / {agent.toolType} / {agent.hostLabel}
+                  {agent.displayName} / {agent.hostLabel}
                 </option>
               ))}
             </select>
-            {model === "__custom" ? (
-              <input
-                value={customModel}
-                onChange={(event) => setCustomModel(event.currentTarget.value)}
-                placeholder="e.g. gpt-5.5"
-                className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
-              />
-            ) : null}
+          </div>
+
+          <div className="grid gap-1">
+            <label className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+              Provider
+            </label>
+            <select
+              value={provider}
+              onChange={(event) => {
+                const next = event.currentTarget.value as "claude" | "codex";
+                setProvider(next);
+                // timeout_allow is not supported for Claude — reset to manual when switching
+                if (next === "claude" && permissionMode === "timeout_allow") setPermissionMode("manual");
+              }}
+              className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
+            >
+              <option value="claude">Claude Code</option>
+              <option value="codex">Codex CLI</option>
+            </select>
           </div>
 
           <div className="grid gap-1">
@@ -274,9 +357,18 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props
               onChange={(event) => setPermissionMode(event.currentTarget.value as PIApprovalPermissionMode)}
               className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
             >
-              <option value="manual">Ask every time</option>
-              <option value="timeout_allow">Auto-approve after 10s</option>
-              <option value="always_allow">Always allow for this session</option>
+              {provider === "claude" ? (
+                <>
+                  <option value="manual">Manual — Claude asks in the terminal</option>
+                  <option value="always_allow">Always — bypass Claude approval prompts</option>
+                </>
+              ) : (
+                <>
+                  <option value="manual">Ask every time</option>
+                  <option value="timeout_allow">Auto-approve after 10s</option>
+                  <option value="always_allow">Always allow for this session</option>
+                </>
+              )}
             </select>
           </div>
 
@@ -289,17 +381,12 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props
               onChange={(event) => setModel(event.currentTarget.value)}
               className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
             >
-            {CODEX_MODEL_OPTIONS.map((option) => (
+            {modelOptions.map((option) => (
               <option key={option.value || "default"} value={option.value}>
                 {option.label}
               </option>
             ))}
           </select>
-            {model === "gpt-5.5" || model === "gpt-5.2-codex" || model === "gpt-5.2-pro" ? (
-              <p className="text-[11px] leading-4 text-[var(--color-text-tertiary)]">
-                This model may depend on your Codex CLI version or account. Codex default is the safest start.
-              </p>
-            ) : null}
           </div>
 
           <div className="grid gap-1">
@@ -335,16 +422,143 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props
             <label className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
               Workspace folder
             </label>
-            <input
-              value={workspace}
-              onChange={(event) => setWorkspace(event.currentTarget.value)}
-              onFocus={() => {
-                if (workspace === workspaceRoot) {
-                  setWorkspace(defaultWorkspace(workspaceRoot, prompt, effectiveTitle));
-                }
-              }}
-              className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
-            />
+            <div className="flex gap-2">
+              <input
+                value={workspace}
+                onChange={(event) => setWorkspace(event.currentTarget.value)}
+                className="min-w-0 flex-1 rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
+              />
+              {selectedAgent && agentDefaultRoot ? (
+                <button
+                  type="button"
+                  onClick={() => { setBrowseOpen((v) => !v); if (!browseOpen) openBrowser(); }}
+                  className="shrink-0 rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-3 py-3 text-[12px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-surface)]"
+                  title="Browse folders"
+                >
+                  Browse
+                </button>
+              ) : null}
+            </div>
+
+            {browseOpen && selectedAgent ? (
+              <div className="mt-2 overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)]">
+                {/* Breadcrumb */}
+                <div className="flex items-center gap-1 border-b border-[var(--color-border-subtle)] px-3 py-2 text-[11px]">
+                  <span className="text-[var(--color-text-tertiary)]">Root:</span>
+                  <button
+                    type="button"
+                    onClick={() => void loadBrowse(selectedAgent.agentId, browseRoot ?? undefined)}
+                    className="truncate font-mono text-[var(--color-accent)] hover:underline"
+                  >
+                    {browseRoot ?? "…"}
+                  </button>
+                  {browsePath && browseRoot && browsePath !== browseRoot ? (
+                    <>
+                      <span className="text-[var(--color-text-tertiary)]">/</span>
+                      <span className="truncate font-mono text-[var(--color-text-primary)]">
+                        {browsePath.slice(browseRoot.length + 1)}
+                      </span>
+                    </>
+                  ) : null}
+                  <div className="ml-auto flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewFolder((v) => !v); setNewFolderName(""); }}
+                      className="rounded-full border border-[var(--color-border-default)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-surface)]"
+                    >
+                      + New folder
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBrowseOpen(false)}
+                      className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                {/* New folder input */}
+                {showNewFolder ? (
+                  <div className="flex gap-2 border-b border-[var(--color-border-subtle)] px-3 py-2">
+                    <input
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.currentTarget.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") void createFolder(); }}
+                      placeholder="New folder name"
+                      autoFocus
+                      className="min-w-0 flex-1 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-1.5 text-[12px] text-[var(--color-text-primary)] outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void createFolder()}
+                      disabled={!newFolderName.trim()}
+                      className="rounded-xl bg-[var(--color-accent)] px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                    >
+                      Create
+                    </button>
+                  </div>
+                ) : null}
+
+                {browseError ? (
+                  <p className="px-3 py-3 text-[12px] text-[var(--color-accent-red)]">{browseError}</p>
+                ) : null}
+
+                {/* Go up */}
+                {browsePath && browseRoot && browsePath !== browseRoot ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const parent = browsePath.split("/").slice(0, -1).join("/") || browseRoot;
+                      void loadBrowse(selectedAgent.agentId, parent);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-surface)]"
+                  >
+                    <span className="text-[var(--color-text-tertiary)]">↑</span> ..
+                  </button>
+                ) : null}
+
+                {/* Directory list */}
+                <div className="max-h-48 overflow-y-auto">
+                  {browseEntries.length === 0 && !browseError ? (
+                    <p className="px-3 py-3 text-[12px] text-[var(--color-text-tertiary)]">Empty folder</p>
+                  ) : null}
+                  {browseEntries.map((entry) => {
+                    const entryPath = `${browsePath}/${entry.name}`;
+                    return (
+                      <div key={entry.name} className="flex items-center gap-1 hover:bg-[var(--color-bg-surface)]">
+                        <button
+                          type="button"
+                          onClick={() => void loadBrowse(selectedAgent.agentId, entryPath)}
+                          className="flex flex-1 items-center gap-2 px-3 py-2 text-left text-[12px] text-[var(--color-text-primary)]"
+                        >
+                          <span className="text-[var(--color-text-tertiary)]">📁</span>
+                          {entry.name}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setWorkspace(entryPath); setBrowseOpen(false); }}
+                          className="mr-2 shrink-0 rounded-full border border-[var(--color-border-default)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-accent)] hover:bg-[var(--color-accent-subtle)]"
+                        >
+                          Select
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Select current path */}
+                <div className="border-t border-[var(--color-border-subtle)] px-3 py-2">
+                  <button
+                    type="button"
+                    onClick={() => { if (browsePath) setWorkspace(browsePath); setBrowseOpen(false); }}
+                    className="text-[11px] font-semibold text-[var(--color-accent)] hover:underline"
+                  >
+                    Use this folder →
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -399,30 +613,32 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props
               {autoResumeUsageLimit ? "Auto resume enabled" : "Auto resume after usage limit"}
             </span>
             <span className="mt-1 block text-[12px] leading-5 text-[var(--color-text-secondary)]">
-              If Codex hits a usage limit, PI queues a follow-up session for the retry time.
+              If the agent hits a usage limit, PI queues a follow-up session for the retry time.
             </span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setAutoRestartCodex((current) => !current)}
-            className={[
-              "rounded-3xl border px-4 py-4 text-left transition",
-              autoRestartCodex
-                ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)]"
-                : "border-[var(--color-border-default)] bg-[var(--color-bg-base)]",
-            ].join(" ")}
-          >
-            <span className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
-              Codex restart
-            </span>
-            <span className="mt-1 block text-[15px] font-semibold text-[var(--color-text-primary)]">
-              {autoRestartCodex ? "Auto restart enabled" : "Auto restart Codex"}
-            </span>
-            <span className="mt-1 block text-[12px] leading-5 text-[var(--color-text-secondary)]">
-              If Codex says restart is required, PI launches a fresh process and resumes this session.
-            </span>
-          </button>
+          {provider === "codex" ? (
+            <button
+              type="button"
+              onClick={() => setAutoRestartCodex((current) => !current)}
+              className={[
+                "rounded-3xl border px-4 py-4 text-left transition",
+                autoRestartCodex
+                  ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)]"
+                  : "border-[var(--color-border-default)] bg-[var(--color-bg-base)]",
+              ].join(" ")}
+            >
+              <span className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+                Codex restart
+              </span>
+              <span className="mt-1 block text-[15px] font-semibold text-[var(--color-text-primary)]">
+                {autoRestartCodex ? "Auto restart enabled" : "Auto restart Codex"}
+              </span>
+              <span className="mt-1 block text-[12px] leading-5 text-[var(--color-text-secondary)]">
+                If Codex says restart is required, PI launches a fresh process and resumes this session.
+              </span>
+            </button>
+          ) : null}
         </div>
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3">

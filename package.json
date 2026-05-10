@@ -9,5 +9,8 @@
     "build": "pnpm --filter @pi/core build && pnpm --filter @pi/relay build && pnpm --filter @pi/web build",
     "dev": "pnpm --filter @pi/web dev",
     "typecheck": "pnpm --filter @pi/core typecheck && pnpm --filter @pi/web typecheck"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "node-pty", "sharp"]
   }
 }

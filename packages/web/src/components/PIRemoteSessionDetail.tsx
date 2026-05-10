@@ -16,6 +16,88 @@ interface Props {
   initialOverview: RemoteApprovalOverview;
 }
 
+// ---------------------------------------------------------------------------
+// Approval request card with optional timeout_allow countdown
+// ---------------------------------------------------------------------------
+
+function ApprovalRequestCard({
+  request,
+  agent,
+  onRespond,
+}: {
+  request: RemoteApprovalRequest;
+  agent: RemoteAgentSummary | undefined;
+  onRespond: (action: "approve" | "reject") => void;
+}) {
+  const isTimeout = agent?.permissionMode === "timeout_allow";
+  const timeoutSeconds = agent?.timeoutSeconds ?? 10;
+
+  const calcRemaining = () => {
+    const elapsedMs = Date.now() - new Date(request.createdAt).getTime();
+    return Math.max(0, Math.ceil(timeoutSeconds - elapsedMs / 1000));
+  };
+
+  const [remaining, setRemaining] = useState<number>(calcRemaining);
+
+  useEffect(() => {
+    if (!isTimeout) return;
+    const id = setInterval(() => setRemaining(calcRemaining()), 500);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTimeout, request.createdAt, timeoutSeconds]);
+
+  // fraction 1 → 0 as time elapses
+  const progress = isTimeout ? remaining / timeoutSeconds : 1;
+
+  return (
+    <article className="rounded-2xl bg-[var(--color-bg-surface)] p-4">
+      <h2 className="text-[16px] font-semibold text-[var(--color-text-primary)]">
+        {request.title}
+      </h2>
+      <p className="mt-2 text-[13px] leading-7 text-[var(--color-text-secondary)]">
+        {request.message}
+      </p>
+      {request.command ? (
+        <pre className="mt-3 overflow-x-auto rounded-xl bg-[var(--color-bg-base)] px-3 py-2 text-[12px] leading-6 text-[var(--color-text-primary)]">
+          {request.command}
+        </pre>
+      ) : null}
+
+      {isTimeout ? (
+        <div className="mt-3">
+          {/* thin progress bar — drains left to right */}
+          <div className="h-[3px] w-full overflow-hidden rounded-full bg-[var(--color-bg-base)]">
+            <div
+              className="h-full rounded-full bg-[var(--color-status-attention)]/50 transition-[width] duration-500 ease-linear"
+              style={{ width: `${progress * 100}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-[11px] text-[var(--color-text-secondary)]">
+            {remaining > 0 ? `Auto-approving in ${remaining}s` : "Auto-approving…"}
+          </p>
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onRespond("approve")}
+          className="rounded-full bg-[var(--color-accent)] px-4 py-2 text-[12px] font-semibold text-white"
+        >
+          Approve
+        </button>
+        <button
+          type="button"
+          onClick={() => onRespond("reject")}
+          className="rounded-full border border-[var(--color-border-subtle)] px-4 py-2 text-[12px] font-semibold text-[var(--color-text-secondary)]"
+        >
+          {isTimeout ? "Cancel" : "Reject"}
+        </button>
+      </div>
+    </article>
+  );
+}
+
 const SHOW_HANDOFF_CONTROLS = false;
 
 async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -469,6 +551,8 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
   useEffect(() => {
     if (!job || !agent || !detectedCliApproval || !canSendInput || isSendingInput) return;
     if (agent.permissionMode === "manual") return;
+    // Key injection is for Codex prompts only — Claude handles approvals natively (or via --dangerously-skip-permissions)
+    if (job.command?.[1]?.toLowerCase() === "claude") return;
     const action = preferredAutoApprovalAction(detectedCliApproval);
     if (!action) return;
     const approvalKey = [
@@ -571,7 +655,12 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
       {action.label}
     </button>
   ));
-  const liveTmuxSession = agent?.toolType === "codex-cli" ? job?.tmuxSession : undefined;
+  // Derive provider from the actual job command (reliable), not agent enrollment toolType
+  const jobProvider = job?.command?.[1]?.toLowerCase() ?? "unknown";
+  const isCodexJob = jobProvider === "codex";
+  const isClaudeJob = jobProvider === "claude";
+  // Use DirectTerminal for any job that has a tmux session (both Codex and Claude Code)
+  const liveTmuxSession = job?.tmuxSession ?? undefined;
 
   if (!job || !agent) {
     return (
@@ -630,7 +719,7 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
           <p>Updated {formatRelativeTime(job.updatedAt)}</p>
           <p>Ralph mode: {job.ralphEnabled ? "iteration" : "off"}</p>
           <p>Usage-limit auto resume: {job.autoResumeUsageLimit ? "enabled" : "off"}</p>
-          <p>Codex auto restart: {job.autoRestartCodex ? "enabled" : "off"}</p>
+          {isCodexJob ? <p>Codex auto restart: {job.autoRestartCodex ? "enabled" : "off"}</p> : null}
           {job.restartedAsJobId ? (
             <p className="truncate">
               Restarted as: {job.restartedAsJobId.replace(/^raj_/, "").slice(0, 8)}
@@ -683,26 +772,28 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
             </span>
           </button>
 
-          <button
-            type="button"
-            disabled={updatingSetting !== null}
-            onClick={() =>
-              void updateJobSetting({ autoRestartCodex: !job.autoRestartCodex }, "restart")
-            }
-            className={[
-              "rounded-3xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
-              job.autoRestartCodex
-                ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)]"
-                : "border-[var(--color-border-default)] bg-[var(--color-bg-base)]",
-            ].join(" ")}
-          >
-            <span className="block text-[12px] font-semibold text-[var(--color-text-primary)]">
-              {job.autoRestartCodex ? "Codex auto restart enabled" : "Enable Codex auto restart"}
-            </span>
-            <span className="mt-1 block text-[12px] leading-5 text-[var(--color-text-secondary)]">
-              If this CLI says restart is required, PI starts a fresh process and resumes the same Codex session.
-            </span>
-          </button>
+          {isCodexJob ? (
+            <button
+              type="button"
+              disabled={updatingSetting !== null}
+              onClick={() =>
+                void updateJobSetting({ autoRestartCodex: !job.autoRestartCodex }, "restart")
+              }
+              className={[
+                "rounded-3xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
+                job.autoRestartCodex
+                  ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)]"
+                  : "border-[var(--color-border-default)] bg-[var(--color-bg-base)]",
+              ].join(" ")}
+            >
+              <span className="block text-[12px] font-semibold text-[var(--color-text-primary)]">
+                {job.autoRestartCodex ? "Codex auto restart enabled" : "Enable Codex auto restart"}
+              </span>
+              <span className="mt-1 block text-[12px] leading-5 text-[var(--color-text-secondary)]">
+                If Codex says restart is required, PI starts a fresh process and resumes the session.
+              </span>
+            </button>
+          ) : null}
         </div>
 
         {usageLimitDetected ? (
@@ -714,7 +805,7 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
           </div>
         ) : null}
 
-        {codexRestartRequired ? (
+        {isCodexJob && codexRestartRequired ? (
           <div className="mt-4 rounded-2xl border border-[var(--color-status-attention)]/40 bg-[var(--color-status-attention-soft)] p-4 text-[13px] leading-6 text-[var(--color-text-secondary)]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -785,31 +876,12 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
           </p>
           <div className="mt-3 grid gap-3">
             {requests.map((request) => (
-              <article key={request.requestId} className="rounded-2xl bg-[var(--color-bg-surface)] p-4">
-                <h2 className="text-[16px] font-semibold text-[var(--color-text-primary)]">{request.title}</h2>
-                <p className="mt-2 text-[13px] leading-7 text-[var(--color-text-secondary)]">{request.message}</p>
-                {request.command ? (
-                  <pre className="mt-3 overflow-x-auto rounded-xl bg-[var(--color-bg-base)] px-3 py-2 text-[12px] leading-6 text-[var(--color-text-primary)]">
-                    {request.command}
-                  </pre>
-                ) : null}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void respond(request, "approve")}
-                    className="rounded-full bg-[var(--color-accent)] px-4 py-2 text-[12px] font-semibold text-white"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void respond(request, "reject")}
-                    className="rounded-full border border-[var(--color-accent-red)] px-4 py-2 text-[12px] font-semibold text-[var(--color-accent-red)]"
-                  >
-                    Reject
-                  </button>
-                </div>
-              </article>
+              <ApprovalRequestCard
+                key={request.requestId}
+                request={request}
+                agent={agent}
+                onRespond={(action) => void respond(request, action)}
+              />
             ))}
           </div>
         </section>
@@ -1011,6 +1083,9 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
       : codexIdlePrompt
         ? "idle"
       : job?.status;
+  const jobProvider = job?.command?.[1]?.toLowerCase() ?? "unknown";
+  const isCodexJob = jobProvider === "codex";
+  const isClaudeJob = jobProvider === "claude";
   const connectedMachines = useMemo(
     () => overview.agents.filter((entry) => entry.connectionState === "connected"),
     [overview.agents],
@@ -1306,12 +1381,18 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#9aa0aa]">
             Permission
           </p>
-          <div className="mt-3 grid grid-cols-3 gap-1 rounded-full bg-[#f3f2ef] p-1">
-            {[
-              { label: "Manual", mode: "manual" },
-              { label: "Auto 10s", mode: "timeout_allow" },
-              { label: "Always", mode: "always_allow" },
-            ].map((item) => {
+          <div className={`mt-3 grid gap-1 rounded-full bg-[#f3f2ef] p-1 ${isClaudeJob ? "grid-cols-2" : "grid-cols-3"}`}>
+            {(isClaudeJob
+              ? [
+                  { label: "Manual", mode: "manual" },
+                  { label: "Always", mode: "always_allow" },
+                ]
+              : [
+                  { label: "Manual", mode: "manual" },
+                  { label: "Auto 10s", mode: "timeout_allow" },
+                  { label: "Always", mode: "always_allow" },
+                ]
+            ).map((item) => {
               const active = agent.permissionMode === item.mode;
               return (
                 <button
@@ -1409,9 +1490,9 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
           {settingButton("Usage auto-resume", job.autoResumeUsageLimit, () => {
             void updateJobSetting({ autoResumeUsageLimit: !job.autoResumeUsageLimit }, "usage");
           }, updatingSetting !== null)}
-          {settingButton("Codex auto-restart", job.autoRestartCodex, () => {
+          {isCodexJob ? settingButton("Codex auto-restart", job.autoRestartCodex, () => {
             void updateJobSetting({ autoRestartCodex: !job.autoRestartCodex }, "restart");
-          }, updatingSetting !== null)}
+          }, updatingSetting !== null) : null}
         </div>
 
         {usageLimitDetected ? (
@@ -1420,7 +1501,7 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
           </div>
         ) : null}
 
-        {codexRestartRequired || providerHeartbeatFailed ? (
+        {(isCodexJob && codexRestartRequired) || providerHeartbeatFailed ? (
           <div className="mt-4 rounded-2xl border border-[var(--color-status-attention)]/40 bg-[var(--color-status-attention-soft)] p-3">
             <p className="text-[12px] font-semibold text-[#1e2026]">
               {codexRestartRequired ? "Restart needed" : "Session degraded"}

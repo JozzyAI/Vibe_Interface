@@ -25,6 +25,12 @@ try:
 except ImportError:  # pragma: no cover - optional until the remote bridge is reinstalled with relay deps
     websocket = None
 
+try:
+    from pi_agent.terminal_relay import TerminalRelayClient, derive_terminal_relay_url
+except ImportError:  # pragma: no cover
+    TerminalRelayClient = None  # type: ignore[assignment,misc]
+    derive_terminal_relay_url = None  # type: ignore[assignment]
+
 
 def normalize_server(server: str) -> str:
     return server.rstrip("/")
@@ -834,6 +840,129 @@ def env_or(args: argparse.Namespace, key: str, env_key: str, default: str | None
     return default
 
 
+# ---------------------------------------------------------------------------
+# Claude Code PreToolUse hook installation
+# ---------------------------------------------------------------------------
+
+# Tools that need PI approval routing via the hook
+_CLAUDE_HOOK_TOOL_MATCHER = "Write|Edit|MultiEdit|Bash|NotebookEdit"
+
+# permissions.allow entries that bypass the native "Do you want to proceed?"
+# prompt for every tool in the matcher.  The PreToolUse hook (pi-approve) is
+# the actual gate; the native prompt must be suppressed so it never fires first.
+_CLAUDE_HOOK_ALLOWED_TOOLS = [
+    "Bash(*)",
+    "Write(*)",
+    "Edit(*)",
+    "MultiEdit(*)",
+    "NotebookEdit(*)",
+]
+
+# Timeout for the hook process: 1 hour in ms (allows time for human approval)
+_CLAUDE_HOOK_TIMEOUT_MS = 3_600_000
+
+
+def _claude_approval_hooks_enabled() -> bool:
+    """Return True only when PI_ENABLE_CLAUDE_APPROVAL_HOOKS=1 is explicitly set.
+    Default is disabled — the Claude Code hook system is not yet reliable enough
+    for production use (hooks are killed after ~2-3 seconds by Claude Code 2.1.138+).
+    """
+    return os.environ.get("PI_ENABLE_CLAUDE_APPROVAL_HOOKS", "0").strip() == "1"
+
+
+def _inject_skip_permissions(command: list[str]) -> list[str]:
+    """Insert --dangerously-skip-permissions right after the binary name in a Claude command.
+    Position matters: Claude Code must see the flag before any positional arguments.
+    Only called when approval hooks are disabled and permission mode is always_allow.
+    """
+    if not command or "--dangerously-skip-permissions" in command:
+        return list(command)
+    return [command[0], "--dangerously-skip-permissions", *command[1:]]
+
+
+def _find_pi_approve() -> str:
+    """Return the pi-approve executable path, falling back to python -m invocation."""
+    found = shutil.which("pi-approve")
+    if found:
+        return found
+    return f"{sys.executable} -m pi_agent.hooks.pi_approve"
+
+
+def install_claude_hook(cwd: str) -> None:
+    """Write/merge hook config + permissions into <cwd>/.claude/settings.json.
+
+    Writes two things:
+      1. PreToolUse hook → pi-approve (the actual permission gate).
+         Claude Code runs the hook BEFORE evaluating permission rules, so the
+         hook fires for every matched tool call regardless of what the allow
+         list says.  Exit 0 = proceed; exit 2 + JSON reason = block.
+
+      2. permissions.allow → all gated tools.
+         After the hook exits 0, Claude Code checks the allow list.  Having the
+         tool in allow suppresses the native "Do you want to proceed?" prompt
+         that would otherwise appear as a second confirmation after the hook
+         already approved.  This is NOT a bypass of the hook — it only
+         prevents the redundant terminal prompt.
+
+    Important: do NOT launch Claude with --dangerously-skip-permissions.
+    That flag bypasses the hook entirely; the hook never fires and PI never
+    sees the approval request.  permissions.allow is the correct mechanism
+    for suppressing the terminal prompt while keeping the hook active.
+
+    Called before launching any Claude Code session managed by pi-agent.
+    """
+    claude_dir = Path(cwd) / ".claude"
+    settings_path = claude_dir / "settings.json"
+    claude_dir.mkdir(parents=True, exist_ok=True)
+
+    hook_command = _find_pi_approve()
+    hook_entry = {
+        "type": "command",
+        "command": hook_command,
+        "timeout": _CLAUDE_HOOK_TIMEOUT_MS,
+    }
+    new_hook_block = {
+        "matcher": _CLAUDE_HOOK_TOOL_MATCHER,
+        "hooks": [hook_entry],
+    }
+
+    # Read existing settings, preserving any other config the user has
+    existing: dict[str, Any] = {}
+    if settings_path.exists():
+        try:
+            with settings_path.open() as f:
+                existing = json.load(f)
+        except Exception:
+            existing = {}
+
+    # --- PreToolUse hook ---
+    hooks = existing.setdefault("hooks", {})
+    pre_tool = hooks.setdefault("PreToolUse", [])
+
+    # Remove any stale pi-approve entry (identified by command containing pi-approve or pi_approve)
+    pre_tool = [
+        block for block in pre_tool
+        if not any(
+            "pi-approve" in h.get("command", "") or "pi_approve" in h.get("command", "")
+            for h in block.get("hooks", [])
+        )
+    ]
+    pre_tool.append(new_hook_block)
+    hooks["PreToolUse"] = pre_tool
+    existing["hooks"] = hooks
+
+    # --- permissions.allow: bypass native prompt so the hook is the sole gate ---
+    permissions = existing.setdefault("permissions", {})
+    allowed: list[str] = permissions.setdefault("allow", [])
+    for tool_perm in _CLAUDE_HOOK_ALLOWED_TOOLS:
+        if tool_perm not in allowed:
+            allowed.append(tool_perm)
+
+    with settings_path.open("w") as f:
+        json.dump(existing, f, indent=2)
+        f.write("\n")
+
+
 def require(value: str | None, label: str) -> str:
     if not value:
         raise RuntimeError(f"Missing required value: {label}")
@@ -1574,9 +1703,25 @@ def run_wrapped(args: argparse.Namespace) -> int:
     interval_s = max(2.0, heartbeat_ms / 1000.0)
     consecutive_failures = 0
 
+    launch_cwd = config_value(args, "cwd", "PI_AGENT_WORKTREE", state_path=state_path, paired_key="worktree", default=os.getcwd()) or os.getcwd()
+    launch_tool = config_value(args, "tool", "PI_AGENT_TOOL", state_path=state_path, paired_key="toolType", default="") or ""
+
+    is_claude_command = "claude" in launch_tool.lower() or (command and "claude" in str(command[0]).lower())
+    if is_claude_command:
+        if _claude_approval_hooks_enabled():
+            try:
+                install_claude_hook(launch_cwd)
+            except Exception as hook_err:
+                print(f"[pi-agent] Warning: could not install Claude hook: {hook_err}", file=sys.stderr)
+        else:
+            # Hooks disabled: inject --dangerously-skip-permissions for always_allow mode
+            launch_permission_mode = registration.get("agent", {}).get("permissionMode") or ""
+            if launch_permission_mode == "always_allow":
+                command = _inject_skip_permissions(list(command))
+
     process = subprocess.Popen(
         command,
-        cwd=config_value(args, "cwd", "PI_AGENT_WORKTREE", state_path=state_path, paired_key="worktree", default=os.getcwd()),
+        cwd=launch_cwd,
         env={
             **os.environ,
             "PI_AGENT_ID": agent_id,
@@ -1584,7 +1729,7 @@ def run_wrapped(args: argparse.Namespace) -> int:
             "PI_AGENT_STATE_FILE": str(state_path),
             "PI_AGENT_DISPLAY_NAME": config_value(args, "display_name", "PI_AGENT_DISPLAY_NAME", state_path=state_path, paired_key="displayName", default="") or "",
             "PI_AGENT_PROJECT": config_value(args, "project", "PI_AGENT_PROJECT", state_path=state_path, paired_key="projectLabel", default="") or "",
-            "PI_AGENT_TOOL": config_value(args, "tool", "PI_AGENT_TOOL", state_path=state_path, paired_key="toolType", default="") or "",
+            "PI_AGENT_TOOL": launch_tool,
         },
     )
 
@@ -1731,6 +1876,31 @@ def run_daemon(args: argparse.Namespace) -> int:
     relay_token = config_value(args, "relay_token", "PI_RELAY_TOKEN", state_path=state_path, paired_key="relay.token")
     relay_client: RelayClient | None = None
     next_sync_at = 0.0
+
+    # Terminal relay — optional, starts a background thread for PTY-over-WebSocket
+    _pi_server = config_value(args, "server", "PI_SERVER", state_path=state_path, paired_key="server") or ""
+    _explicit_terminal_relay_url = config_value(
+        args, "terminal_relay_url", "PI_TERMINAL_RELAY_URL", state_path=state_path, paired_key=None
+    )
+    terminal_relay_url: str | None = (
+        derive_terminal_relay_url(_pi_server, _explicit_terminal_relay_url)
+        if derive_terminal_relay_url is not None
+        else None
+    )
+    terminal_relay_token: str = relay_token or ""
+    terminal_relay_client: Any | None = None
+    if terminal_relay_url and TerminalRelayClient is not None:
+        terminal_relay_client = TerminalRelayClient(
+            relay_url=terminal_relay_url,
+            agent_id=agent_id,
+            token=terminal_relay_token,
+        )
+        terminal_relay_client.start()
+        print(json.dumps({
+            "event": "terminal_relay_starting",
+            "agentId": agent_id,
+            "url": terminal_relay_url,
+        }))
 
     def refresh_registration() -> None:
         nonlocal registration, agent, agent_id
@@ -1999,6 +2169,20 @@ def run_daemon(args: argparse.Namespace) -> int:
             else str(job.get("toolType") or "unknown")
         )
 
+        if provider == "claude":
+            if _claude_approval_hooks_enabled():
+                try:
+                    install_claude_hook(cwd)
+                except Exception as hook_err:
+                    print(json.dumps({
+                        "event": "claude_hook_install_warning",
+                        "jobId": job_id,
+                        "error": str(hook_err),
+                    }), indent=2)
+            # When hooks are disabled, --dangerously-skip-permissions is injected
+            # by run_wrapped inside the inner pi-agent process, not here.
+            # Injecting here would target the outer pi-agent command, not claude.
+
         force_interactive = child_env.get("PI_REMOTE_INTERACTIVE") == "1"
         if tmux_available() and (force_interactive or is_interactive_remote_command(command)):
             session_name = tmux_session_name(job_id)
@@ -2010,6 +2194,10 @@ def run_daemon(args: argparse.Namespace) -> int:
                 "PI_HOOK_REQUEST_EXTERNAL": "pi-agent request-external-action",
                 "PI_HOOK_REQUEST_SESSION": "pi-agent request-pi-session",
                 "PI_SESSION_DIR": str(artifact_dir),
+                # Carry the current PATH so pi-approve is findable inside tmux
+                # (tmux inherits from the server start environment, not the
+                # current shell, so conda/pyenv paths can be missing).
+                "PATH": os.environ.get("PATH", ""),
             }
             if handoff_enabled():
                 remote_env.update(
@@ -2091,6 +2279,10 @@ def run_daemon(args: argparse.Namespace) -> int:
                     indent=2,
                 )
             )
+            # Announce this tmux session to the terminal relay so the browser
+            # can open a live interactive terminal for this job.
+            if terminal_relay_client is not None:
+                terminal_relay_client.announce(session_name)
             return
 
         command = command_with_optional_pty(command)
@@ -2376,6 +2568,22 @@ def run_daemon(args: argparse.Namespace) -> int:
                             "logPath": log_path,
                             "artifactDir": artifact_dir,
                         }
+                        # Re-announce to the relay so the browser can reconnect
+                        # after PI server or pi-agent restarts. Without this,
+                        # the relay has no record of the session and every
+                        # TerminalManager.open() fails with "not found on relay".
+                        if terminal_relay_client is not None:
+                            terminal_relay_client.announce(session_name)
+                        # Immediately re-report with tmuxSession so the server's
+                        # JSON is current even if the earlier report was lost.
+                        safe_report_job(
+                            job_id,
+                            "running",
+                            logFile=str(log_path),
+                            logTail=tail_text(log_path),
+                            tmuxSession=session_name,
+                            **handoff_payload(artifact_dir),
+                        )
                     elif log_path.exists():
                         safe_report_job(
                             job_id,
@@ -2410,6 +2618,23 @@ def run_daemon(args: argparse.Namespace) -> int:
                             screen,
                         )
                         request_pi_utility_session_from_runtime(job_id, screen)
+
+                        # Codex-only: auto-approve diff confirmation prompts when always_allow.
+                        # Claude Code approvals are handled by the PreToolUse hook (pi-approve),
+                        # not by tmux key injection.
+                        if str(job_state.get("provider") or "unknown").lower() == "codex":
+                            current_permission_mode = heartbeat.get("agent", agent).get("permissionMode") or agent.get("permissionMode")
+                            if (
+                                current_permission_mode == "always_allow"
+                                and provider_state.get("state") == "waiting_approval"
+                                and provider_state.get("reason") == "interactive_choice_prompt"
+                            ):
+                                last_auto = job_state.get("lastAutoApprovalFingerprint")
+                                current_fingerprint = screen_fingerprint(screen)
+                                if last_auto != current_fingerprint:
+                                    job_state["lastAutoApprovalFingerprint"] = current_fingerprint
+                                    tmux_send_input(session_name, "", True)
+
                         ralph_prompt = maybe_send_ralph_nudge(
                             job_id,
                             job_state,
@@ -2603,6 +2828,9 @@ def run_daemon(args: argparse.Namespace) -> int:
         if relay_client is not None:
             relay_client.close()
             relay_client = None
+        if terminal_relay_client is not None:
+            terminal_relay_client.stop()
+            terminal_relay_client = None
         heartbeat_agent(
             argparse.Namespace(
                 server=config_value(args, "server", "PI_SERVER", state_path=state_path, paired_key="server"),

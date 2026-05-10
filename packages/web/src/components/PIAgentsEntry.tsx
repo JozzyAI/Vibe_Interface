@@ -120,7 +120,7 @@ async function copyText(text: string): Promise<void> {
 export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "detail" }: Props) {
   const [overview, setOverview] = useState(initialRemoteOverview);
   const [form, setForm] = useState<RemoteEnrollmentForm>({
-    displayName: "My Codex",
+    displayName: "My Machine",
     projectLabel: "local-machine",
     toolType: "codex-cli",
     expiresInMinutes: 60,
@@ -317,7 +317,7 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
           </button>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px]">
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div className="grid gap-1">
             <label className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
               Machine name
@@ -343,25 +343,6 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
               }}
               className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-3 py-2 text-[12px] text-[var(--color-text-primary)]"
             />
-          </div>
-          <div className="grid gap-1">
-            <label className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
-              Tool
-            </label>
-            <select
-              value={form.toolType}
-              onChange={(event) => {
-                const value = event.currentTarget.value as RemoteEnrollmentForm["toolType"];
-                setForm((current) => ({
-                  ...current,
-                  toolType: value,
-                }));
-              }}
-              className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-3 py-2 text-[12px] text-[var(--color-text-primary)]"
-            >
-              <option value="codex-cli">Codex CLI</option>
-              <option value="claude-code">Claude Code</option>
-            </select>
           </div>
         </div>
 

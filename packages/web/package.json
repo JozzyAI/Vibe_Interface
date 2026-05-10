@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "concurrently \"npm:dev:next\" \"npm:dev:direct-terminal\"",
+    "dev:next": "next dev",
+    "dev:direct-terminal": "tsx watch server/direct-terminal-ws.ts",
+    "build": "next build && tsc -p tsconfig.server.json",
     "start": "node dist-server/start-all.js",
     "typecheck": "tsc --noEmit"
   },
@@ -17,16 +19,20 @@
     "next-themes": "^0.4.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "node-pty": "^1.1.0",
     "server-only": "^0.0.1",
     "ws": "^8.19.0",
     "xterm": "^5.3.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/ws": "^8.18.1",
+    "concurrently": "^9.2.1",
     "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
 }
