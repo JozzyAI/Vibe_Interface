@@ -1,5 +1,9 @@
 "use client";
 
+// Hardcoded LAN address so remote machines on the same WiFi get the correct pair command.
+// Change this if the host machine's IP changes.
+const PI_SERVER_ORIGIN = "http://192.168.1.83:3000";
+
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type {
   RemoteAgentJob,
@@ -92,7 +96,7 @@ function folderName(path: string | undefined): string {
 
 function pairingCommand(enrollment: RemoteEnrollmentSummary | null): string | null {
   if (!enrollment || typeof window === "undefined") return null;
-  return `pi-agent pair --server ${window.location.origin} --code ${enrollment.code} --start`;
+  return `pi-agent pair --server ${PI_SERVER_ORIGIN} --code ${enrollment.code} --start`;
 }
 
 function reconnectCommand(agent: RemoteAgentSummary, serverOrigin: string): string | null {
@@ -138,7 +142,7 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
   }, [initialRemoteOverview]);
 
   useEffect(() => {
-    setBrowserOrigin(window.location.origin);
+    setBrowserOrigin(PI_SERVER_ORIGIN);
   }, []);
 
   const agents = useMemo(

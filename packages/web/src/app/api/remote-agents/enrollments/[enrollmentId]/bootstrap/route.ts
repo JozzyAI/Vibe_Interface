@@ -10,7 +10,7 @@ export async function GET(
   try {
     const { enrollmentId } = await context.params;
     const enrollment = await getRemoteEnrollmentForBootstrap({ enrollmentId });
-    const server = request.nextUrl.origin;
+    const server = process.env.PI_PUBLIC_URL ?? request.nextUrl.origin;
     const packageUrl = `${server}/api/remote-agents/bootstrap/package`;
     const script = `#!/usr/bin/env bash
 set -euo pipefail

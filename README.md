@@ -159,6 +159,7 @@ Default is disabled — Claude Code 2.1.x kills hooks after ~2–3 seconds regar
 | `PORT` | `3000` | Next.js server port |
 | `PI_WORKSPACE_ROOT` | `/srv/pi/workspaces` | Root directory for the workspace file browser |
 | `NEXT_PUBLIC_DIRECT_TERMINAL_PORT` | `14801` | DirectTerminal WebSocket port |
+| `PI_PUBLIC_URL` | _(request origin)_ | Override the server URL shown in pair commands (e.g. `http://192.168.1.83:3000` for LAN access from WSL2). Set in `packages/web/.env.local`. |
 | `PI_RELAY_TOKENS` | — | Comma-separated `token:kind:label` entries for pi-agent auth. Empty = dev mode (no auth). |
 | `PI_ENABLE_CLAUDE_APPROVAL_HOOKS` | `0` | Set to `1` to enable experimental Claude approval hook system |
 | `GITHUB_CLIENT_ID` | — | GitHub OAuth app client ID (optional — PAT auth works without it) |
