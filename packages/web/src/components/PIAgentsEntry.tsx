@@ -59,7 +59,17 @@ function connectionTone(agent: RemoteAgentSummary): string {
   if (agent.connectionState === "stale") {
     return "border-[var(--color-status-attention)] text-[var(--color-status-attention)]";
   }
+  if (agent.connectionState === "disabled") {
+    return "border-[var(--color-border-default)] text-[var(--color-text-tertiary)]";
+  }
   return "border-[var(--color-accent-red)] text-[var(--color-accent-red)]";
+}
+
+function connectionOrder(state: string): number {
+  if (state === "connected") return 0;
+  if (state === "stale") return 1;
+  if (state === "disconnected") return 2;
+  return 3; // disabled
 }
 
 function jobTone(job: RemoteAgentJob): string {
@@ -148,8 +158,8 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
   const agents = useMemo(
     () =>
       [...overview.agents].sort((left, right) => {
-        if (left.connectionState === "connected" && right.connectionState !== "connected") return -1;
-        if (left.connectionState !== "connected" && right.connectionState === "connected") return 1;
+        const orderDiff = connectionOrder(left.connectionState) - connectionOrder(right.connectionState);
+        if (orderDiff !== 0) return orderDiff;
         return new Date(right.lastSeenAt).getTime() - new Date(left.lastSeenAt).getTime();
       }),
     [overview.agents],
@@ -731,11 +741,70 @@ function MachineRow({
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [resumingSessionId, setResumingSessionId] = useState<string | null>(null);
   const [copiedReconnect, setCopiedReconnect] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
+  const [reconnectCode, setReconnectCode] = useState<{ code: string; command: string; advancedCommand: string; relayUrl: string } | null>(null);
+  const [copiedReconnectCode, setCopiedReconnectCode] = useState(false);
   const [isPending, startTransition] = useTransition();
   const isCodexAgent = agent.toolType.toLowerCase().includes("codex");
   const codexSessions = isCodexAgent ? (agent.sessionHistory ?? []) : [];
   const reconnect = reconnectCommand(agent, serverOrigin);
   const recentJobs = [...jobs].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 5);
+  const activeJobs = jobs.filter((job) => job.status === "running" || job.status === "queued");
+
+  const disconnectMachine = () =>
+    startTransition(() => {
+      void (async () => {
+        try {
+          setLifecycleError(null);
+          await requestJson(`/api/remote-agents/agents/${encodeURIComponent(agent.agentId)}/disconnect`, { method: "POST" });
+          await onRefresh();
+        } catch (err) {
+          setLifecycleError(err instanceof Error ? err.message : "Failed to disconnect");
+        }
+      })();
+    });
+
+  const forgetMachine = () =>
+    startTransition(() => {
+      void (async () => {
+        try {
+          setLifecycleError(null);
+          if (activeJobs.length > 0) {
+            const ok = window.confirm(
+              `This machine has ${activeJobs.length} active job(s). They must be stopped first. Proceed anyway?`,
+            );
+            if (!ok) return;
+          } else {
+            const ok = window.confirm(
+              `Forget "${agent.displayName}"? This removes the machine from PI. Session history is kept.`,
+            );
+            if (!ok) return;
+          }
+          await requestJson(`/api/remote-agents/agents/${encodeURIComponent(agent.agentId)}`, { method: "DELETE" });
+          await onRefresh();
+        } catch (err) {
+          setLifecycleError(err instanceof Error ? err.message : "Failed to forget machine");
+        }
+      })();
+    });
+
+  const generateReconnectCode = () =>
+    startTransition(() => {
+      void (async () => {
+        try {
+          setLifecycleError(null);
+          setCopiedReconnectCode(false);
+          const result = await requestJson<{ enrollment: { code: string }; pairCommand: string; advancedCommand: string; relayUrl: string }>(
+            `/api/remote-agents/agents/${encodeURIComponent(agent.agentId)}/reconnect`,
+            { method: "POST" },
+          );
+          setReconnectCode({ code: result.enrollment.code, command: result.pairCommand, advancedCommand: result.advancedCommand, relayUrl: result.relayUrl });
+          await onRefresh();
+        } catch (err) {
+          setLifecycleError(err instanceof Error ? err.message : "Failed to generate reconnect code");
+        }
+      })();
+    });
 
   const pollResumeJob = async (jobId: string) => {
     for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -807,14 +876,16 @@ function MachineRow({
       </div>
 
       {agent.connectionState !== "connected" ? (
-        <div className="mt-3 rounded-2xl border border-[var(--color-accent-red)]/40 bg-[var(--color-bg-surface)] p-3">
+        <div className={`mt-3 rounded-2xl p-3 ${agent.connectionState === "disabled" ? "border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]" : "border border-[var(--color-accent-red)]/40 bg-[var(--color-bg-surface)]"}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-[12px] font-semibold text-[var(--color-text-primary)]">
-                This machine is offline
+                {agent.connectionState === "disabled" ? "Machine paused in PI" : "This machine is offline"}
               </p>
               <p className="mt-1 text-[12px] leading-5 text-[var(--color-text-secondary)]">
-                Queued jobs and Resume will wait here until the bridge daemon reconnects on that machine.
+                {agent.connectionState === "disabled"
+                  ? "PI will not dispatch new jobs. The daemon on the machine will stop automatically on its next heartbeat. Use Reconnect to re-pair."
+                  : "Queued jobs and Resume will wait here until the bridge daemon reconnects on that machine."}
               </p>
             </div>
             {reconnect ? (
@@ -958,6 +1029,87 @@ function MachineRow({
           ) : null}
         </div>
       ) : null}
+
+      {/* ── Machine lifecycle controls ─────────────────────────────── */}
+      <div className="mt-4 rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+          Machine controls
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {agent.connectionState !== "disabled" ? (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={disconnectMachine}
+              title="Stops PI from dispatching new jobs. The daemon on the machine will exit on its next heartbeat."
+              className="rounded-full border border-[var(--color-border-default)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:border-[var(--color-status-attention)] hover:text-[var(--color-status-attention)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Pause
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={generateReconnectCode}
+            className="rounded-full border border-[var(--color-border-default)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Reconnect
+          </button>
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={forgetMachine}
+            className="rounded-full border border-[var(--color-border-default)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:border-[var(--color-accent-red)] hover:text-[var(--color-accent-red)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Forget machine
+          </button>
+        </div>
+
+        {reconnectCode ? (
+          <div className="mt-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-base)] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+                  One-time reconnect code
+                </p>
+                <p className="mt-0.5 text-[16px] font-semibold tracking-[0.1em] text-[var(--color-text-primary)]">
+                  {reconnectCode.code}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  void copyText(reconnectCode.command)
+                    .then(() => setCopiedReconnectCode(true))
+                    .catch(() => void 0);
+                }}
+                className="rounded-full border border-[var(--color-border-default)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-primary)]"
+              >
+                {copiedReconnectCode ? "Copied" : "Copy command"}
+              </button>
+            </div>
+            <pre className="mt-2 overflow-x-auto rounded-lg bg-[var(--color-bg-surface)] px-3 py-2 text-[11px] leading-5 text-[var(--color-text-primary)]">
+              {reconnectCode.command}
+            </pre>
+            <details className="mt-2">
+              <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-tertiary)]">
+                Advanced — with terminal relay URL
+              </summary>
+              <p className="mt-1 text-[11px] leading-5 text-[var(--color-text-secondary)]">
+                Use this if the live terminal (DirectTerminal) is not connecting.
+                Relay: <span className="font-mono">{reconnectCode.relayUrl}</span>
+              </p>
+              <pre className="mt-1 overflow-x-auto rounded-lg bg-[var(--color-bg-surface)] px-3 py-2 text-[11px] leading-5 text-[var(--color-text-primary)]">
+                {reconnectCode.advancedCommand}
+              </pre>
+            </details>
+          </div>
+        ) : null}
+
+        {lifecycleError ? (
+          <p className="mt-3 text-[12px] font-medium text-[var(--color-accent-red)]">{lifecycleError}</p>
+        ) : null}
+      </div>
     </div>
   );
 }

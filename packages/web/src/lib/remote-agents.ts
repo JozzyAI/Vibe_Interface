@@ -781,7 +781,10 @@ export async function heartbeatRemoteAgent(input: {
   agent.repoRoot = input.repoRoot?.trim() || agent.repoRoot;
   agent.stateFile = input.stateFile?.trim() || agent.stateFile;
   agent.logFile = input.logFile?.trim() || agent.logFile;
-  agent.connectionState = input.connectionState ?? agent.connectionState;
+  // Preserve user-set "disabled" — a heartbeat from the live agent cannot re-enable it.
+  if (agent.connectionState !== "disabled") {
+    agent.connectionState = input.connectionState ?? agent.connectionState;
+  }
   agent.consecutiveFailures =
     typeof input.consecutiveFailures === "number" ? Math.max(0, Math.floor(input.consecutiveFailures)) : agent.consecutiveFailures;
   agent.lastError = input.lastError?.trim() || undefined;
@@ -835,7 +838,95 @@ export async function updateRemoteAgentDetails(input: {
   return agent;
 }
 
+/** Mark an agent as user-disabled. PI stops dispatching jobs; the agent is kept in the store. */
+export async function disableRemoteAgent(agentId: string): Promise<RemoteAgentRecord> {
+  const store = await readStore();
+  const agent = store.agents.find((entry) => entry.agentId === agentId);
+  if (!agent) throw new Error(`Unknown remote agent: ${agentId}`);
+  agent.connectionState = "disabled";
+  agent.status = "paused";
+  appendRemoteEvent(store, { type: "machine.updated", agentId, metadata: { connectionState: "disabled" } });
+  await writeStore(store);
+  return agent;
+}
+
+/**
+ * Permanently remove an agent and its associated enrollments and open requests.
+ * Jobs are kept for audit history.
+ * Throws if the agent has active (running/queued) jobs.
+ */
+export async function forgetRemoteAgent(agentId: string): Promise<void> {
+  const store = await readStore();
+  const agent = store.agents.find((entry) => entry.agentId === agentId);
+  if (!agent) throw new Error(`Unknown remote agent: ${agentId}`);
+
+  const activeJobs = store.jobs.filter(
+    (job) => job.agentId === agentId && (job.status === "running" || job.status === "queued") && !job.archivedAt,
+  );
+  if (activeJobs.length > 0) {
+    throw new Error(
+      `Cannot forget machine with ${activeJobs.length} active job(s). Stop or archive them first.`,
+    );
+  }
+
+  store.agents = store.agents.filter((entry) => entry.agentId !== agentId);
+  store.enrollments = store.enrollments.filter((entry) => {
+    const consumed = entry.consumedAt;
+    // Remove only unconsumed (pending) enrollments for this agent's display name + tool type combo.
+    // Consumed enrollments don't carry agentId, so we match by display name to avoid over-deleting.
+    if (consumed) return true;
+    return entry.displayName !== agent.displayName || entry.toolType !== agent.toolType;
+  });
+  store.requests = store.requests.filter(
+    (entry) => entry.agentId !== agentId || entry.status !== "open",
+  );
+  appendRemoteEvent(store, { type: "machine.updated", agentId, metadata: { forgotten: true } });
+  await writeStore(store);
+}
+
+/**
+ * Create a fresh enrollment for an existing (or forgotten) agent identity so it can re-pair.
+ * Uses PI_PUBLIC_URL for the server address shown in the pair command.
+ */
+export async function createReconnectEnrollment(agentId: string): Promise<{
+  enrollment: RemoteEnrollmentSummary;
+  pairCommand: string;
+  advancedCommand: string;
+  relayUrl: string;
+}> {
+  const store = await readStore();
+  const agent = store.agents.find((entry) => entry.agentId === agentId);
+  if (!agent) throw new Error(`Unknown remote agent: ${agentId}`);
+
+  const enrollment = await createRemoteEnrollment({
+    displayName: agent.displayName,
+    projectLabel: agent.projectLabel,
+    toolType: agent.toolType,
+    expiresInMinutes: 60,
+  });
+
+  const serverOrigin = (process.env.PI_PUBLIC_URL ?? "").trim().replace(/\/$/, "") || "http://localhost:3000";
+  // Derive the terminal relay WebSocket URL from the public server origin.
+  // http://host:port → ws://host:14801/pi-agent-relay (local dev)
+  // https://host    → wss://host/pi-agent-relay (production)
+  let relayUrl: string;
+  if (serverOrigin.startsWith("https://")) {
+    const host = serverOrigin.slice("https://".length).split("/")[0];
+    relayUrl = `wss://${host}/pi-agent-relay`;
+  } else {
+    const host = serverOrigin.replace(/^https?:\/\//, "").split(":")[0];
+    const directPort = process.env.DIRECT_TERMINAL_PORT ?? "14801";
+    relayUrl = `ws://${host}:${directPort}/pi-agent-relay`;
+  }
+
+  const pairCommand = `pi-agent pair --server ${serverOrigin} --code ${enrollment.code} --start`;
+  const advancedCommand = `PI_TERMINAL_RELAY_URL=${relayUrl} \\\n  pi-agent pair --server ${serverOrigin} --code ${enrollment.code} --start`;
+  return { enrollment, pairCommand, advancedCommand, relayUrl };
+}
+
 function deriveConnectionState(agent: RemoteAgentRecord): RemoteAgentConnectionState {
+  // Preserve user-set disabled state — don't let heartbeat age override it.
+  if (agent.connectionState === "disabled") return "disabled";
   const ageMs = Date.now() - new Date(agent.lastSeenAt).getTime();
   if (!Number.isFinite(ageMs) || ageMs < 30_000) return agent.connectionState ?? "connected";
   if (ageMs < 120_000) return "stale";

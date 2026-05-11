@@ -2652,6 +2652,14 @@ def run_daemon(args: argparse.Namespace) -> int:
                         repo_root=config_value(args, "repo_root", "PI_AGENT_REPO_ROOT", state_path=state_path, paired_key="repoRoot", default=os.getcwd()),
                     )
                     heartbeat = heartbeat_agent(heartbeat_args)
+                    if heartbeat.get("shouldStop"):
+                        print(json.dumps({
+                            "event": "daemon_stop_requested",
+                            "agentId": agent_id,
+                            "reason": "Agent paused in PI — stop signal received from server",
+                        }, indent=2))
+                        dbg.log("daemon_stop_requested", agentId=agent_id, reason="paused_in_pi")
+                        raise KeyboardInterrupt
                     polled = poll_agent(heartbeat_args)
                     dbg.log(
                         "heartbeat",

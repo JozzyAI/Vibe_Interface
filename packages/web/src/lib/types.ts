@@ -289,7 +289,7 @@ export interface PIApprovalHubData {
 // ---------------------------------------------------------------------------
 
 export type RemoteAgentStatus = "running" | "awaiting_approval" | "awaiting_input" | "completed" | "failed" | "paused";
-export type RemoteAgentConnectionState = "connected" | "stale" | "disconnected";
+export type RemoteAgentConnectionState = "connected" | "stale" | "disconnected" | "disabled";
 
 export interface RemoteRelayState {
   url?: string; peerId?: string; connected: boolean;

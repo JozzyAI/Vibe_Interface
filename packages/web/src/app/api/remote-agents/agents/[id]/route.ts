@@ -1,6 +1,22 @@
 import { type NextRequest } from "next/server";
 import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
-import { updateRemoteAgentDetails } from "@/lib/remote-agents";
+import { updateRemoteAgentDetails, forgetRemoteAgent } from "@/lib/remote-agents";
+
+export async function DELETE(
+  request: NextRequest,
+  props: { params: Promise<{ id: string }> },
+) {
+  const correlationId = getCorrelationId(request);
+  try {
+    const { id } = await props.params;
+    await forgetRemoteAgent(id);
+    return jsonWithCorrelation({ forgotten: true }, { status: 200 }, correlationId);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Failed to forget machine";
+    const status = msg.includes("active job") ? 409 : 500;
+    return jsonWithCorrelation({ error: msg }, { status }, correlationId);
+  }
+}
 
 export async function PATCH(
   request: NextRequest,

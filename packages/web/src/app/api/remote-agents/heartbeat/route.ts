@@ -30,7 +30,9 @@ export async function POST(request: NextRequest) {
       authConnectors?: RemoteAuthConnectorSummary[];
     };
     const agent = await heartbeatRemoteAgent(body);
-    return jsonWithCorrelation({ agent }, { status: 200 }, correlationId);
+    // Tell pi-agent to stop cleanly when the user has paused/disabled this machine in PI.
+    const shouldStop = agent.connectionState === "disabled";
+    return jsonWithCorrelation({ agent, shouldStop }, { status: 200 }, correlationId);
   } catch (error) {
     return jsonWithCorrelation(
       { error: error instanceof Error ? error.message : "Failed to heartbeat remote agent" },
