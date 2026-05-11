@@ -71,12 +71,12 @@ const CODEX_MODEL_OPTIONS = [
 ];
 
 const CLAUDE_MODEL_OPTIONS = [
-  { value: "", label: "Default (claude-sonnet-4-6)" },
-  { value: "claude-opus-4-7", label: "claude-opus-4-7" },
+  { value: "", label: "Default — use Claude Code's configured model" },
+  { value: "sonnet", label: "sonnet" },
+  { value: "opus", label: "opus" },
   { value: "claude-sonnet-4-6", label: "claude-sonnet-4-6" },
-  { value: "claude-haiku-4-5-20251001", label: "claude-haiku-4-5" },
-  { value: "claude-opus-4-5", label: "claude-opus-4-5" },
-  { value: "claude-sonnet-4-5", label: "claude-sonnet-4-5" },
+  { value: "claude-opus-4-7", label: "claude-opus-4-7" },
+  { value: "__custom", label: "Custom..." },
 ];
 
 const REASONING_OPTIONS = [
@@ -99,6 +99,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props
   const [permissionMode, setPermissionMode] = useState<PIApprovalPermissionMode>("manual");
   const [provider, setProvider] = useState<"claude" | "codex">("claude");
   const [model, setModel] = useState("");
+  const [customModel, setCustomModel] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState("");
   const modelOptions = provider === "claude" ? CLAUDE_MODEL_OPTIONS : CODEX_MODEL_OPTIONS;
   const [ralphEnabled, setRalphEnabled] = useState(false);
@@ -147,6 +148,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props
   // Reset model when provider changes
   useEffect(() => {
     setModel("");
+    setCustomModel("");
   }, [provider]);
 
   // Folder browser helpers
@@ -189,7 +191,8 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props
   };
 
   const effectiveTitle = title.trim() || titleFromPrompt(prompt);
-  const effectiveModel = model;
+  // Resolve __custom sentinel; treat empty/default as no model (omit --model flag)
+  const effectiveModel = model === "__custom" ? customModel.trim() : model;
 
   const startSession = () =>
     startTransition(() => {
@@ -381,12 +384,20 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props
               onChange={(event) => setModel(event.currentTarget.value)}
               className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
             >
-            {modelOptions.map((option) => (
-              <option key={option.value || "default"} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+              {modelOptions.map((option) => (
+                <option key={option.value || "default"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            {model === "__custom" ? (
+              <input
+                value={customModel}
+                onChange={(event) => setCustomModel(event.currentTarget.value)}
+                placeholder={provider === "claude" ? "e.g. claude-opus-4-7" : "e.g. gpt-5.5"}
+                className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
+              />
+            ) : null}
           </div>
 
           <div className="grid gap-1">

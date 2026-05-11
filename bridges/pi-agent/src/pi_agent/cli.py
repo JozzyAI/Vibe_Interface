@@ -1005,6 +1005,132 @@ def log_file_path(state_path: Path) -> Path:
     return state_path.with_suffix(".log")
 
 
+# ── Debug logging ──────────────────────────────────────────────────────────────
+
+_DEBUG_LOG_PATH = Path.home() / ".config" / "pi-agent" / "debug.log"
+
+# Env var names whose values should be redacted in debug output.
+_SECRET_KEY_RE = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL", re.IGNORECASE)
+
+# Env vars relevant to Claude/Codex that we include in debug child-env snapshots.
+_RELEVANT_ENV_PREFIXES = ("ANTHROPIC_", "CLAUDE_", "OPENAI_", "PI_", "CODEX_")
+_RELEVANT_ENV_KEYS = {"PATH", "HOME", "USER", "SHELL", "TERM"}
+
+
+def _redact_value(key: str, value: str) -> str:
+    return "<redacted>" if _SECRET_KEY_RE.search(key) else value
+
+
+def _sanitize_env(env: dict[str, str]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for key, val in sorted(env.items()):
+        if key in _RELEVANT_ENV_KEYS or any(key.startswith(p) for p in _RELEVANT_ENV_PREFIXES):
+            out[key] = _redact_value(key, val)
+    return out
+
+
+class DebugLogger:
+    """Structured debug logger for pi-agent foreground mode.
+
+    Writes JSON-lines to stdout and appends to ~/.config/pi-agent/debug.log.
+    Instantiate with enabled=False (the default) and all methods become no-ops.
+    """
+
+    def __init__(self, enabled: bool = False) -> None:
+        self.enabled = enabled
+        self._handle = None
+        if enabled:
+            _DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            self._handle = _DEBUG_LOG_PATH.open("a", encoding="utf-8")
+            self._emit("debug_session_start", logFile=str(_DEBUG_LOG_PATH))
+
+    def log(self, event: str, **data: Any) -> None:
+        if not self.enabled:
+            return
+        self._emit(event, **data)
+
+    def _emit(self, event: str, **data: Any) -> None:
+        entry = {"ts": iso_now(), "event": event, **data}
+        line = json.dumps(entry, default=str)
+        print(f"[debug] {line}", flush=True)
+        if self._handle:
+            try:
+                self._handle.write(line + "\n")
+                self._handle.flush()
+            except OSError:
+                pass
+
+    def close(self) -> None:
+        if self._handle:
+            try:
+                self._handle.close()
+            except OSError:
+                pass
+            self._handle = None
+
+
+_claude_info_cache: dict[str, Any] | None = None
+
+
+def _claude_debug_info(cwd: str | None = None) -> dict[str, Any]:
+    """Return cached Claude binary + env + settings info for debug output.
+
+    Runs `claude --version` once and caches the result for the process lifetime.
+    Reading claude settings.json is per-call (cwd-dependent).
+    """
+    global _claude_info_cache
+    if _claude_info_cache is None:
+        claude_bin = shutil.which("claude")
+        version: str | None = None
+        if claude_bin:
+            try:
+                r = subprocess.run(
+                    [claude_bin, "--version"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                version = (r.stdout or r.stderr).strip().splitlines()[0] if r.returncode == 0 else "error"
+            except Exception as exc:
+                version = f"error: {exc}"
+        _claude_info_cache = {"binary": claude_bin, "version": version}
+
+    env = os.environ
+    info: dict[str, Any] = dict(_claude_info_cache)
+
+    # Claude Code model env vars (these override the configured default)
+    info["envModel"] = {
+        "ANTHROPIC_MODEL": env.get("ANTHROPIC_MODEL"),
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": env.get("ANTHROPIC_DEFAULT_SONNET_MODEL"),
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": env.get("ANTHROPIC_DEFAULT_OPUS_MODEL"),
+        "ANTHROPIC_API_KEY": "present" if env.get("ANTHROPIC_API_KEY") else "not set",
+    }
+
+    # Claude settings.json model config (project-level then global)
+    settings_model: str | None = None
+    settings_sources: list[str] = []
+    for settings_dir in filter(None, [
+        cwd and str(Path(cwd) / ".claude"),
+        env.get("CLAUDE_CONFIG_DIR"),
+        str(Path.home() / ".claude"),
+    ]):
+        p = Path(settings_dir) / "settings.json"
+        if p.exists():
+            try:
+                cfg = json.loads(p.read_text(encoding="utf-8"))
+                m = cfg.get("model")
+                if m and not settings_model:
+                    settings_model = str(m)
+                settings_sources.append(f"{p}: model={m!r}")
+            except Exception:
+                settings_sources.append(f"{p}: (parse error)")
+
+    info["settingsModel"] = settings_model
+    info["settingsSources"] = settings_sources
+    return info
+
+
+# ── /Debug logging ─────────────────────────────────────────────────────────────
+
+
 def load_state_file(path: Path) -> dict[str, Any]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -1680,6 +1806,7 @@ def pair_bridge(args: argparse.Namespace) -> int:
             relay_url=None,
             relay_token=None,
             heartbeat_ms=getattr(args, "heartbeat_ms", None),
+            debug=getattr(args, "debug", False),
         )
         start_exit = start_daemon(start_args)
         result["started"] = start_exit == 0
@@ -1859,6 +1986,7 @@ def approve_command(args: argparse.Namespace) -> int:
 
 
 def run_daemon(args: argparse.Namespace) -> int:
+    dbg = DebugLogger(enabled=getattr(args, "debug", False))
     registration, state_path = ensure_registered_agent(args)
     pid_path = pid_file_path(state_path)
     pid_path.write_text(str(os.getpid()), encoding="utf-8")
@@ -1902,11 +2030,25 @@ def run_daemon(args: argparse.Namespace) -> int:
             "url": terminal_relay_url,
         }))
 
+    dbg.log(
+        "daemon_startup",
+        agentId=agent_id,
+        displayName=agent.get("displayName"),
+        toolType=agent.get("toolType"),
+        hostLabel=agent.get("hostLabel"),
+        server=_pi_server,
+        relayUrl=terminal_relay_url,
+        permissionMode=agent.get("permissionMode"),
+        stateFile=str(state_path),
+        pid=os.getpid(),
+    )
+
     def refresh_registration() -> None:
         nonlocal registration, agent, agent_id
         registration, _ = ensure_registered_agent(args)
         agent = registration["agent"]
         agent_id = agent["agentId"]
+        dbg.log("daemon_reregistered", agentId=agent_id)
         print(json.dumps({"event": "daemon_reregistered", "agentId": agent_id}, indent=2))
 
     update_state_file(
@@ -1946,10 +2088,12 @@ def run_daemon(args: argparse.Namespace) -> int:
         return relay_state if isinstance(relay_state, dict) else {}
 
     def safe_report_job(job_id: str, status: str, **extra: Any) -> bool:
+        dbg.log("job_status", jobId=job_id, status=status, **{k: v for k, v in extra.items() if k != "logTail"})
         try:
             report_job(args, job_id, status, **extra)
             return True
         except Exception as error:
+            dbg.log("job_report_failed", jobId=job_id, status=status, error=str(error))
             print(
                 json.dumps(
                     {
@@ -2169,11 +2313,62 @@ def run_daemon(args: argparse.Namespace) -> int:
             else str(job.get("toolType") or "unknown")
         )
 
+        # Extract model from provider_args (everything after the "--" separator in the command)
+        _sep_idx = next((i for i, p in enumerate(command) if p == "--"), None)
+        _provider_args = command[_sep_idx + 1:] if _sep_idx is not None else []
+        _model_val: str | None = None
+        if "--model" in _provider_args:
+            _mi = _provider_args.index("--model")
+            if _mi + 1 < len(_provider_args):
+                _model_val = _provider_args[_mi + 1]
+        # --dangerously-skip-permissions is injected by the inner process for always_allow
+        # when hooks are disabled; predict it here from the current permission mode.
+        _current_permission_mode = agent.get("permissionMode") or ""
+        _skip_perms_predicted = (
+            _current_permission_mode == "always_allow" and not _claude_approval_hooks_enabled()
+        ) if provider == "claude" else "--dangerously-skip-permissions" in command
+
+        dbg.log(
+            "job_received",
+            jobId=job_id,
+            title=title,
+            provider=provider,
+            cwd=cwd,
+            command=command,
+            hasModel=_model_val is not None,
+            model=_model_val,
+            hasSkipPerms=_skip_perms_predicted,
+            permissionMode=_current_permission_mode,
+            childEnv=_sanitize_env(child_env),
+        )
+
+        if provider == "claude" and dbg.enabled:
+            _ci = _claude_debug_info(cwd)
+            dbg.log(
+                "claude_job",
+                jobId=job_id,
+                finalCommandOuter=command,
+                hasModel=_model_val is not None,
+                model=_model_val,
+                hasSkipPerms=_skip_perms_predicted,
+                permissionMode=_current_permission_mode,
+                claudeBinary=_ci.get("binary"),
+                claudeVersion=_ci.get("version"),
+                envModel=_ci.get("envModel"),
+                settingsModel=_ci.get("settingsModel"),
+                settingsSources=_ci.get("settingsSources"),
+                note=(
+                    "ANTHROPIC_MODEL or settingsModel can override --model; "
+                    "if an unexpected hardcoded Claude model appears, check envModel and settingsSources above"
+                ),
+            )
+
         if provider == "claude":
             if _claude_approval_hooks_enabled():
                 try:
                     install_claude_hook(cwd)
                 except Exception as hook_err:
+                    dbg.log("claude_hook_install_warning", jobId=job_id, error=str(hook_err))
                     print(json.dumps({
                         "event": "claude_hook_install_warning",
                         "jobId": job_id,
@@ -2186,6 +2381,7 @@ def run_daemon(args: argparse.Namespace) -> int:
         force_interactive = child_env.get("PI_REMOTE_INTERACTIVE") == "1"
         if tmux_available() and (force_interactive or is_interactive_remote_command(command)):
             session_name = tmux_session_name(job_id)
+            dbg.log("tmux_session", jobId=job_id, sessionName=session_name, cwd=cwd)
             remote_env = {
                 "PI_SERVER": child_env["PI_SERVER"],
                 "PI_AGENT_ID": agent_id,
@@ -2457,6 +2653,13 @@ def run_daemon(args: argparse.Namespace) -> int:
                     )
                     heartbeat = heartbeat_agent(heartbeat_args)
                     polled = poll_agent(heartbeat_args)
+                    dbg.log(
+                        "heartbeat",
+                        agentId=agent_id,
+                        permissionMode=heartbeat.get("agent", {}).get("permissionMode"),
+                        pendingJobs=len(polled.get("pendingJobs", [])),
+                        pendingRequests=len(polled.get("pendingRequests", [])),
+                    )
                     if relay_client is not None:
                         relay_client.heartbeat()
                         current_state = load_state_file(state_path)
@@ -2825,6 +3028,8 @@ def run_daemon(args: argparse.Namespace) -> int:
 
             time.sleep(0.5)
     except KeyboardInterrupt:
+        dbg.log("daemon_interrupted", agentId=agent_id)
+        dbg.close()
         if relay_client is not None:
             relay_client.close()
             relay_client = None
@@ -2853,6 +3058,21 @@ def run_daemon(args: argparse.Namespace) -> int:
 
 
 def start_daemon(args: argparse.Namespace) -> int:
+    debug = getattr(args, "debug", False)
+
+    # In debug mode run the daemon in the foreground of the current terminal.
+    if debug:
+        print(json.dumps({
+            "started": True,
+            "mode": "foreground_debug",
+            "logFile": str(_DEBUG_LOG_PATH),
+            "note": "Running in foreground. Ctrl+C to stop.",
+        }, indent=2), flush=True)
+        daemon_ns = vars(args).copy()
+        daemon_ns["command"] = "daemon"
+        daemon_args = argparse.Namespace(**daemon_ns)
+        return run_daemon(daemon_args)
+
     state_path = resolve_state_file(args)
     pid_path = pid_file_path(state_path)
     log_path = log_file_path(state_path)
@@ -3039,6 +3259,119 @@ def context_bridge(args: argparse.Namespace) -> int:
     return 0
 
 
+def debug_env(args: argparse.Namespace) -> int:  # noqa: ARG001
+    """Print sanitized environment and tool info for debugging."""
+    claude_bin = shutil.which("claude")
+    codex_bin = shutil.which("codex")
+
+    claude_version: str | None = None
+    if claude_bin:
+        try:
+            result = subprocess.run(
+                [claude_bin, "--version"], capture_output=True, text=True, timeout=5
+            )
+            claude_version = (result.stdout or result.stderr).strip().splitlines()[0] if result.returncode == 0 else "error"
+        except Exception as exc:
+            claude_version = f"error: {exc}"
+
+    codex_version: str | None = None
+    if codex_bin:
+        try:
+            result = subprocess.run(
+                [codex_bin, "--version"], capture_output=True, text=True, timeout=5
+            )
+            codex_version = (result.stdout or result.stderr).strip().splitlines()[0] if result.returncode == 0 else "error"
+        except Exception as exc:
+            codex_version = f"error: {exc}"
+
+    # Claude config file locations
+    claude_config_dir = os.environ.get("CLAUDE_CONFIG_DIR") or str(Path.home() / ".claude")
+    claude_settings = Path(claude_config_dir) / "settings.json"
+
+    # State files
+    state_dir = Path.home() / ".config" / "pi-agent"
+    state_files = sorted(state_dir.glob("*.json")) if state_dir.exists() else []
+
+    info: dict[str, Any] = {
+        "claude": {
+            "binary": claude_bin,
+            "version": claude_version,
+            "configDir": claude_config_dir,
+            "settingsFile": str(claude_settings),
+            "settingsExists": claude_settings.exists(),
+        },
+        "codex": {
+            "binary": codex_bin,
+            "version": codex_version,
+        },
+        "env": {
+            "PATH": os.environ.get("PATH"),
+            "ANTHROPIC_API_KEY": "present" if os.environ.get("ANTHROPIC_API_KEY") else "not set",
+            "ANTHROPIC_MODEL": os.environ.get("ANTHROPIC_MODEL"),
+            "ANTHROPIC_DEFAULT_SONNET_MODEL": os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL"),
+            "ANTHROPIC_DEFAULT_OPUS_MODEL": os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL"),
+            "CLAUDE_CONFIG_DIR": os.environ.get("CLAUDE_CONFIG_DIR"),
+        },
+        "piAgent": {
+            "stateDir": str(state_dir),
+            "stateFiles": [str(p) for p in state_files],
+            "debugLog": str(_DEBUG_LOG_PATH),
+            "debugLogExists": _DEBUG_LOG_PATH.exists(),
+        },
+    }
+    print(json.dumps(info, indent=2))
+    return 0
+
+
+def debug_last_job(args: argparse.Namespace) -> int:
+    """Print the last received job payload from the debug log or state file."""
+    state_path = resolve_state_file(args)
+    last_job_event: dict[str, Any] | None = None
+    last_status_event: dict[str, Any] | None = None
+
+    # Try debug log first (most detailed)
+    if _DEBUG_LOG_PATH.exists():
+        try:
+            for line in _DEBUG_LOG_PATH.read_text(encoding="utf-8").splitlines():
+                try:
+                    entry = json.loads(line)
+                    if entry.get("event") == "job_received":
+                        last_job_event = entry
+                    elif entry.get("event") == "job_status":
+                        last_status_event = entry
+                except json.JSONDecodeError:
+                    continue
+        except OSError:
+            pass
+
+    # Fall back to state file
+    state_jobs: list[dict[str, Any]] = []
+    try:
+        state = load_state_file(state_path)
+        state_jobs = state.get("jobs", [])
+    except Exception:
+        pass
+
+    result: dict[str, Any] = {
+        "source": "debug_log" if last_job_event else ("state_file" if state_jobs else "none"),
+        "lastJobEvent": last_job_event,
+        "lastStatusEvent": last_status_event,
+        "stateFileJobs": [
+            {
+                "jobId": j.get("jobId"),
+                "title": j.get("title"),
+                "status": j.get("status"),
+                "command": j.get("command"),
+                "model": j.get("model"),
+                "tmuxSession": j.get("tmuxSession"),
+            }
+            for j in state_jobs[-3:]
+        ],
+    }
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pi-agent")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -3065,6 +3398,7 @@ def build_parser() -> argparse.ArgumentParser:
     pair.add_argument("--code", required=True)
     pair.add_argument("--start", action="store_true")
     pair.add_argument("--heartbeat-ms")
+    pair.add_argument("--debug", action="store_true", help="Run daemon in foreground with verbose debug output")
 
     approval = subparsers.add_parser("request-approval", parents=[common])
     approval.add_argument("--title", required=True)
@@ -3137,13 +3471,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     daemon = subparsers.add_parser("daemon", parents=[common])
     daemon.add_argument("--heartbeat-ms")
+    daemon.add_argument("--debug", action="store_true", help="Stream verbose debug output to stdout")
 
     start_daemon_parser = subparsers.add_parser("start-daemon", parents=[common])
     start_daemon_parser.add_argument("--heartbeat-ms")
+    start_daemon_parser.add_argument("--debug", action="store_true", help="Run daemon in foreground with verbose debug output")
 
     subparsers.add_parser("stop-daemon", parents=[common])
     subparsers.add_parser("status", parents=[common])
     subparsers.add_parser("context", parents=[common])
+
+    debug_parser = subparsers.add_parser("debug", parents=[common], help="Debug helpers")
+    debug_parser.add_argument(
+        "debug_subcommand",
+        choices=["env", "last-job"],
+        help="env: print sanitized tool/env info; last-job: print last received job payload",
+    )
 
     return parser
 
@@ -3230,6 +3573,11 @@ def main() -> None:
         raise SystemExit(status_daemon(args))
     if args.command == "context":
         raise SystemExit(context_bridge(args))
+    if args.command == "debug":
+        if args.debug_subcommand == "env":
+            raise SystemExit(debug_env(args))
+        if args.debug_subcommand == "last-job":
+            raise SystemExit(debug_last_job(args))
 
     parser.print_help()
     raise SystemExit(1)

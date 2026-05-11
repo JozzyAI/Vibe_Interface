@@ -419,6 +419,15 @@ const CODEX_MODEL_OPTIONS = [
   { value: "__custom", label: "Custom model..." },
 ];
 
+const CLAUDE_MODEL_OPTIONS = [
+  { value: "", label: "Default — use Claude Code's configured model" },
+  { value: "sonnet", label: "sonnet" },
+  { value: "opus", label: "opus" },
+  { value: "claude-sonnet-4-6", label: "claude-sonnet-4-6" },
+  { value: "claude-opus-4-7", label: "claude-opus-4-7" },
+  { value: "__custom", label: "Custom..." },
+];
+
 const REASONING_OPTIONS = [
   { value: "", label: "Default thinking" },
   { value: "low", label: "Low" },
@@ -1121,11 +1130,12 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
 
   useEffect(() => {
     const model = job?.model ?? "";
-    const isKnownModel = CODEX_MODEL_OPTIONS.some((option) => option.value === model);
+    const knownOptions = isClaudeJob ? CLAUDE_MODEL_OPTIONS : CODEX_MODEL_OPTIONS;
+    const isKnownModel = knownOptions.some((option) => option.value === model);
     setSelectedModel(isKnownModel ? model : model ? "__custom" : "");
     setCustomModel(isKnownModel ? "" : model);
     setSelectedReasoningEffort(job?.reasoningEffort ?? "");
-  }, [job?.jobId, job?.model, job?.reasoningEffort]);
+  }, [job?.jobId, job?.model, job?.reasoningEffort, isClaudeJob]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1426,7 +1436,7 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
               onChange={(event) => setSelectedModel(event.currentTarget.value)}
               className="rounded-xl border border-[#e4e4e0] bg-[#f8f7f4] px-3 py-2 text-[12px] font-semibold text-[#1e2026]"
             >
-              {CODEX_MODEL_OPTIONS.map((option) => (
+              {(isClaudeJob ? CLAUDE_MODEL_OPTIONS : CODEX_MODEL_OPTIONS).map((option) => (
                 <option key={option.value || "default"} value={option.value}>
                   {option.label}
                 </option>
@@ -1436,7 +1446,7 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
               <input
                 value={customModel}
                 onChange={(event) => setCustomModel(event.currentTarget.value)}
-                placeholder="e.g. gpt-5.5"
+                placeholder={isClaudeJob ? "e.g. claude-opus-4-7" : "e.g. gpt-5.5"}
                 className="rounded-xl border border-[#e4e4e0] bg-[#f8f7f4] px-3 py-2 text-[12px] font-semibold text-[#1e2026]"
               />
             ) : null}
@@ -1472,7 +1482,9 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
               {isRestarting ? "Restarting..." : "Save and restart"}
             </button>
             <p className="text-[11px] leading-4 text-[#7b808b]">
-              Restart/resume is required for Codex model changes.
+              {isClaudeJob
+                ? "Default uses Claude Code's configured model."
+                : "Restart/resume is required for Codex model changes."}
             </p>
             {codexRestartRequired ? (
               <p className="rounded-xl border border-[#ff6b78]/35 bg-[#fff0f2] px-3 py-2 text-[11px] leading-4 text-[#9f2434]">

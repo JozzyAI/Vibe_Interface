@@ -45,12 +45,18 @@ function buildProviderCommand(input: {
             : []),
         ]
       : [];
+  // Claude Code uses --model <value>; omit entirely when empty/default.
+  const claudeOptions =
+    input.provider === "claude" && input.model?.trim()
+      ? ["--model", input.model.trim()]
+      : [];
+  const extraOptions = [...codexOptions, ...claudeOptions];
   if (providerArgs.length > 0) {
-    command.push("--", ...codexOptions, ...providerArgs);
+    command.push("--", ...extraOptions, ...providerArgs);
   } else if (input.prompt?.trim()) {
-    command.push("--", ...codexOptions, withPiHookInstructions(input.prompt) ?? input.prompt.trim());
-  } else if (codexOptions.length > 0) {
-    command.push("--", ...codexOptions);
+    command.push("--", ...extraOptions, withPiHookInstructions(input.prompt) ?? input.prompt.trim());
+  } else if (extraOptions.length > 0) {
+    command.push("--", ...extraOptions);
   }
   return command;
 }
