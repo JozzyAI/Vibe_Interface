@@ -23,7 +23,6 @@ interface Props {
 interface RemoteEnrollmentForm {
   displayName: string;
   projectLabel: string;
-  toolType: "codex-cli" | "claude-code";
   expiresInMinutes: number;
 }
 
@@ -136,7 +135,6 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
   const [form, setForm] = useState<RemoteEnrollmentForm>({
     displayName: "My Machine",
     projectLabel: "local-machine",
-    toolType: "codex-cli",
     expiresInMinutes: 60,
   });
   const [latestEnrollment, setLatestEnrollment] = useState<RemoteEnrollmentSummary | null>(
@@ -193,7 +191,7 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
             "/api/remote-agents/enrollments",
             {
               method: "POST",
-              body: JSON.stringify(form),
+              body: JSON.stringify({ ...form, toolType: "agent" }),
             },
           );
           setLatestEnrollment(created.enrollment);
@@ -266,7 +264,7 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <span className="rounded-full border border-[var(--color-border-default)] px-3 py-1 text-[11px] font-semibold text-[var(--color-text-secondary)]">
-                  {selectedAgent.toolType}
+                  Machine
                 </span>
                 <span className="rounded-full border border-[var(--color-border-default)] px-3 py-1 text-[11px] font-semibold text-[var(--color-text-secondary)]">
                   {selectedAgent.projectLabel}
@@ -745,8 +743,8 @@ function MachineRow({
   const [reconnectCode, setReconnectCode] = useState<{ code: string; command: string; advancedCommand: string; relayUrl: string } | null>(null);
   const [copiedReconnectCode, setCopiedReconnectCode] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const isCodexAgent = agent.toolType.toLowerCase().includes("codex");
-  const codexSessions = isCodexAgent ? (agent.sessionHistory ?? []) : [];
+  // Session history is only populated for Codex sessions by pi-agent; use it directly.
+  const codexSessions = agent.sessionHistory ?? [];
   const reconnect = reconnectCommand(agent, serverOrigin);
   const recentJobs = [...jobs].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 5);
   const activeJobs = jobs.filter((job) => job.status === "running" || job.status === "queued");
@@ -867,7 +865,7 @@ function MachineRow({
             {agent.displayName}
           </p>
           <p className="mt-1 text-[12px] text-[var(--color-text-secondary)]">
-            {agent.toolType} / {agent.hostLabel} / last seen {formatRelativeTime(agent.lastSeenAt)}
+            {agent.hostLabel} / last seen {formatRelativeTime(agent.lastSeenAt)}
           </p>
         </div>
         <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${connectionTone(agent)}`}>
@@ -951,8 +949,8 @@ function MachineRow({
                   </span>
                 </div>
                 <p className="mt-2 truncate text-[11px] text-[var(--color-text-tertiary)]">
-                  Started {formatRelativeTime(job.startedAt ?? job.createdAt)}
-                  {job.logFile ? ` / log: ${job.logFile}` : ""}
+                  {job.command?.[1] === "claude" ? "Claude Code" : job.command?.[1] === "codex" ? "Codex" : job.command?.[1] ?? ""}
+                  {" · "}Started {formatRelativeTime(job.startedAt ?? job.createdAt)}
                 </p>
                 {job.error ? (
                   <p className="mt-2 text-[11px] font-medium text-[var(--color-accent-red)]">
@@ -965,7 +963,7 @@ function MachineRow({
         </div>
       ) : null}
 
-      {isCodexAgent ? (
+      {codexSessions.length > 0 ? (
         <div className="mt-4 rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>

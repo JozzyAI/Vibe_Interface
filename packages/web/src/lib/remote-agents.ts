@@ -389,8 +389,18 @@ function buildRalphIterationCommand(
   iteration: number,
 ): string[] {
   const prompt = buildRalphIterationPrompt(job, iteration);
-  const toolType = agent?.toolType.toLowerCase() ?? "";
-  if (toolType.includes("claude")) {
+  // Derive provider from the actual job command — provider belongs to the session, not the machine.
+  const jobProvider = job.command?.[1]?.toLowerCase();
+  const isClaudeJob = jobProvider === "claude";
+  const isCodexJob = jobProvider === "codex";
+  if (!isClaudeJob && !isCodexJob) {
+    // Fallback: legacy agent.toolType for very old records without a command
+    const toolType = agent?.toolType.toLowerCase() ?? "";
+    if (toolType.includes("claude")) {
+      return ["pi-agent", "claude", "--cwd", cwd, "--", prompt];
+    }
+  }
+  if (isClaudeJob) {
     return ["pi-agent", "claude", "--cwd", cwd, "--", prompt];
   }
   return [
