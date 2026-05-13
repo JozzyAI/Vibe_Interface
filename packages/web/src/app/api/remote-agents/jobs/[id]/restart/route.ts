@@ -10,10 +10,11 @@ export async function POST(
   const correlationId = getCorrelationId(request);
   try {
     const { id } = await params;
-    const body = (await request.json().catch(() => ({}))) as { agentId?: string };
+    const body = (await request.json().catch(() => ({}))) as { agentId?: string; fresh?: boolean };
     const job = await restartRemoteCodexJob({
       jobId: id,
       agentId: body.agentId,
+      fresh: Boolean(body.fresh),
     });
     const relayDispatch = await dispatchRelayJob(job.agentId, job);
     return jsonWithCorrelation({ job, relayDispatch }, { status: 200 }, correlationId);

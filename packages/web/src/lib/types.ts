@@ -380,9 +380,10 @@ export interface RemoteAgentJobInput {
 
 export type RemoteAgentEventType =
   | "machine.registered" | "machine.connected" | "machine.disconnected"
-  | "machine.updated" | "session.created" | "session.recovered"
+  | "machine.updated" | "machine.removed" | "machine.daemon_restart_requested"
+  | "session.created" | "session.recovered"
   | "session.status_changed" | "session.provider_state_changed"
-  | "session.input_queued" | "session.archived" | "session.restarted"
+  | "session.input_queued" | "session.archived" | "session.removed" | "session.restarted"
   | "session.continued" | "session.auto_resume_queued"
   | "session.ralph_iteration_queued" | "approval.requested"
   | "approval.decided" | "policy.updated";

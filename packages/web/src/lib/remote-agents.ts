@@ -56,6 +56,32 @@ interface RemoteEnrollmentRecord extends RemoteEnrollmentSummary {
   relayToken?: string;
 }
 
+interface RemovedRemoteAgentRecord {
+  agentId: string;
+  displayName?: string;
+  projectLabel?: string;
+  toolType?: string;
+  hostLabel?: string;
+  removedAt: string;
+  reason?: string;
+}
+
+interface RemovedRemoteJobRecord {
+  jobId: string;
+  agentId?: string;
+  removedAt: string;
+  reason?: string;
+}
+
+interface RemoteAgentControlCommandRecord {
+  commandId: string;
+  agentId: string;
+  type: "restart_daemon";
+  status: "pending" | "delivered";
+  createdAt: string;
+  deliveredAt?: string;
+}
+
 function serializeEnrollment(entry: RemoteEnrollmentRecord): RemoteEnrollmentSummary {
   return {
     enrollmentId: entry.enrollmentId,
@@ -76,6 +102,9 @@ interface RemoteAgentStore {
   jobs: RemoteAgentJob[];
   events: RemoteAgentEvent[];
   enrollments: RemoteEnrollmentRecord[];
+  removedAgents: RemovedRemoteAgentRecord[];
+  removedJobs: RemovedRemoteJobRecord[];
+  controlCommands: RemoteAgentControlCommandRecord[];
 }
 
 const DEFAULT_TIMEOUT_SECONDS = 10;
@@ -92,6 +121,9 @@ function defaultStore(): RemoteAgentStore {
     jobs: [],
     events: [],
     enrollments: [],
+    removedAgents: [],
+    removedJobs: [],
+    controlCommands: [],
   };
 }
 
@@ -112,6 +144,9 @@ async function readStore(): Promise<RemoteAgentStore> {
       jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
       events: Array.isArray(parsed.events) ? parsed.events : [],
       enrollments: Array.isArray(parsed.enrollments) ? parsed.enrollments : [],
+      removedAgents: Array.isArray(parsed.removedAgents) ? parsed.removedAgents : [],
+      removedJobs: Array.isArray(parsed.removedJobs) ? parsed.removedJobs : [],
+      controlCommands: Array.isArray(parsed.controlCommands) ? parsed.controlCommands : [],
     };
     lastGoodStore = store;
     return store;
@@ -153,6 +188,53 @@ function appendRemoteEvent(
   };
   store.events = [event, ...(store.events ?? [])].slice(0, MAX_REMOTE_EVENTS);
   return event;
+}
+
+function removedAgentRecord(
+  store: RemoteAgentStore,
+  agentId: string,
+): RemovedRemoteAgentRecord | undefined {
+  return store.removedAgents.find((entry) => entry.agentId === agentId);
+}
+
+function removedJobRecord(
+  store: RemoteAgentStore,
+  jobId: string,
+): RemovedRemoteJobRecord | undefined {
+  return store.removedJobs.find((entry) => entry.jobId === jobId);
+}
+
+function stoppedRemovedAgent(record: RemovedRemoteAgentRecord): RemoteAgentRecord {
+  const removedAt = record.removedAt;
+  return {
+    agentId: record.agentId,
+    displayName: record.displayName ?? "Removed machine",
+    projectLabel: record.projectLabel ?? "",
+    toolType: record.toolType ?? "remote",
+    hostLabel: record.hostLabel ?? "removed",
+    status: "paused",
+    permissionMode: "manual",
+    timeoutSeconds: DEFAULT_TIMEOUT_SECONDS,
+    connectionState: "disabled",
+    consecutiveFailures: 0,
+    lastSeenAt: removedAt,
+    createdAt: removedAt,
+  };
+}
+
+function collectJobTree(store: RemoteAgentStore, rootJobId: string): Set<string> {
+  const ids = new Set<string>([rootJobId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const job of store.jobs) {
+      if (job.parentJobId && ids.has(job.parentJobId) && !ids.has(job.jobId)) {
+        ids.add(job.jobId);
+        changed = true;
+      }
+    }
+  }
+  return ids;
 }
 
 function cycleMode(mode: PIApprovalPermissionMode): PIApprovalPermissionMode {
@@ -329,6 +411,20 @@ function buildCodexResumeCommand(
     ...codexModelArgs(options),
     "resume",
     candidate.sessionId,
+  ];
+}
+
+function buildCodexFreshCommand(
+  cwd: string,
+  options: { model?: string | null; reasoningEffort?: string | null } = {},
+): string[] {
+  return [
+    "pi-agent",
+    "codex",
+    "--cwd",
+    cwd,
+    "--",
+    ...codexModelArgs(options),
   ];
 }
 
@@ -782,6 +878,8 @@ export async function heartbeatRemoteAgent(input: {
   const store = await readStore();
   const agent = store.agents.find((entry) => entry.agentId === input.agentId);
   if (!agent) {
+    const removed = removedAgentRecord(store, input.agentId);
+    if (removed) return stoppedRemovedAgent(removed);
     throw new Error(`Unknown remote agent: ${input.agentId}`);
   }
   const previousConnectionState = deriveConnectionState(agent);
@@ -860,6 +958,43 @@ export async function disableRemoteAgent(agentId: string): Promise<RemoteAgentRe
   return agent;
 }
 
+export async function requestRemoteAgentDaemonRestart(agentId: string): Promise<{
+  agent: RemoteAgentRecord;
+  command: RemoteAgentControlCommandRecord;
+}> {
+  const store = await normalizeStore();
+  const agent = store.agents.find((entry) => entry.agentId === agentId);
+  if (!agent) throw new Error(`Unknown remote agent: ${agentId}`);
+  if (agent.connectionState !== "connected" && agent.connectionState !== "stale") {
+    throw new Error("Machine is not connected enough to receive a restart command");
+  }
+
+  const now = new Date().toISOString();
+  store.controlCommands = (store.controlCommands ?? []).filter(
+    (entry) => !(entry.agentId === agentId && entry.type === "restart_daemon" && entry.status === "pending"),
+  );
+  const command: RemoteAgentControlCommandRecord = {
+    commandId: `rac_${randomUUID()}`,
+    agentId,
+    type: "restart_daemon",
+    status: "pending",
+    createdAt: now,
+  };
+  store.controlCommands.unshift(command);
+  appendRemoteEvent(store, {
+    type: "machine.daemon_restart_requested",
+    agentId,
+    createdAt: now,
+    severity: "attention",
+    metadata: {
+      source: "pi-dashboard",
+      commandId: command.commandId,
+    },
+  });
+  await writeStore(store);
+  return { agent, command };
+}
+
 /**
  * Permanently remove an agent and its associated enrollments and open requests.
  * Jobs are kept for audit history.
@@ -892,6 +1027,77 @@ export async function forgetRemoteAgent(agentId: string): Promise<void> {
   );
   appendRemoteEvent(store, { type: "machine.updated", agentId, metadata: { forgotten: true } });
   await writeStore(store);
+}
+
+export async function removeRemoteAgent(input: {
+  agentId: string;
+  removeJobs?: boolean;
+  reason?: string;
+}): Promise<{ removedJobIds: string[] }> {
+  const store = await readStore();
+  const agent = store.agents.find((entry) => entry.agentId === input.agentId);
+  if (!agent) {
+    const removed = removedAgentRecord(store, input.agentId);
+    if (removed) return { removedJobIds: [] };
+    throw new Error(`Unknown remote agent: ${input.agentId}`);
+  }
+
+  const now = new Date().toISOString();
+  const removeJobs = input.removeJobs ?? true;
+  const removedJobIds = removeJobs
+    ? store.jobs.filter((job) => job.agentId === agent.agentId).map((job) => job.jobId)
+    : [];
+  const removedJobIdSet = new Set(removedJobIds);
+
+  store.agents = store.agents.filter((entry) => entry.agentId !== agent.agentId);
+  if (removeJobs) {
+    store.jobs = store.jobs.filter((job) => !removedJobIdSet.has(job.jobId));
+  }
+  store.requests = store.requests.filter((request) => {
+    if (request.agentId === agent.agentId) return false;
+    if (request.parentJobId && removedJobIdSet.has(request.parentJobId)) return false;
+    if (request.createdJobId && removedJobIdSet.has(request.createdJobId)) return false;
+    return true;
+  });
+  store.enrollments = store.enrollments.filter(
+    (entry) => entry.displayName !== agent.displayName || entry.toolType !== agent.toolType,
+  );
+  store.removedAgents = [
+    {
+      agentId: agent.agentId,
+      displayName: agent.displayName,
+      projectLabel: agent.projectLabel,
+      toolType: agent.toolType,
+      hostLabel: agent.hostLabel,
+      removedAt: now,
+      reason: input.reason ?? "user_removed",
+    },
+    ...store.removedAgents.filter((entry) => entry.agentId !== agent.agentId),
+  ].slice(0, 200);
+  if (removedJobIds.length > 0) {
+    const existingRemovedJobs = store.removedJobs.filter((entry) => !removedJobIdSet.has(entry.jobId));
+    store.removedJobs = [
+      ...removedJobIds.map((jobId) => ({
+        jobId,
+        agentId: agent.agentId,
+        removedAt: now,
+        reason: "machine_removed",
+      })),
+      ...existingRemovedJobs,
+    ].slice(0, 500);
+  }
+  appendRemoteEvent(store, {
+    type: "machine.removed",
+    agentId: agent.agentId,
+    createdAt: now,
+    severity: "warning",
+    metadata: {
+      removeJobs,
+      removedJobCount: removedJobIds.length,
+    },
+  });
+  await writeStore(store);
+  return { removedJobIds };
 }
 
 /**
@@ -1520,6 +1726,7 @@ export async function updateRemoteAgentJobSettings(input: {
 export async function restartRemoteCodexJob(input: {
   jobId: string;
   agentId?: string;
+  fresh?: boolean;
 }): Promise<RemoteAgentJob> {
   const store = await readStore();
   const job = store.jobs.find((entry) => entry.jobId === input.jobId);
@@ -1533,25 +1740,34 @@ export async function restartRemoteCodexJob(input: {
   if (!agent) {
     throw new Error(`Unknown remote agent: ${job.agentId}`);
   }
-  const candidate = findResumeCandidate(agent, job);
-  if (!candidate) {
+  const candidate = input.fresh ? undefined : findResumeCandidate(agent, job);
+  if (!input.fresh && !candidate) {
     throw new Error("No Codex session history is available to resume");
   }
-  const cwd = candidate.cwd ?? job.cwd ?? commandCwd(job.command) ?? agent.worktree ?? agent.repoRoot;
+  const cwd = candidate?.cwd ?? job.cwd ?? commandCwd(job.command) ?? agent.worktree ?? agent.repoRoot;
   if (!cwd) {
-    throw new Error("No working directory is available for the resumed Codex session");
+    throw new Error("No working directory is available for the restarted Codex session");
   }
 
   const now = new Date().toISOString();
+  const command = input.fresh
+    ? buildCodexFreshCommand(cwd, {
+        model: job.model,
+        reasoningEffort: job.reasoningEffort,
+      })
+    : buildCodexResumeCommand(candidate as RemoteAgentSessionHistoryItem, cwd, {
+        model: job.model,
+        reasoningEffort: job.reasoningEffort,
+      });
+  const title = input.fresh
+    ? `Fresh Codex session: ${job.title.replace(/^Restart Codex session:\s*/i, "").slice(0, 64)}`
+    : `Restart Codex session: ${(candidate as RemoteAgentSessionHistoryItem).sessionId.slice(0, 8)}`;
   const nextJob: RemoteAgentJob = {
     jobId: `raj_${randomUUID()}`,
     agentId: job.agentId,
     type: "start_agent",
-    title: `Restart Codex session: ${candidate.sessionId.slice(0, 8)}`,
-    command: buildCodexResumeCommand(candidate, cwd, {
-      model: job.model,
-      reasoningEffort: job.reasoningEffort,
-    }),
+    title,
+    command,
     cwd,
     env: {
       ...(job.env ?? {}),
@@ -1559,7 +1775,7 @@ export async function restartRemoteCodexJob(input: {
       PI_RALPH_MODE: job.ralphEnabled ? "iteration" : "off",
       PI_AUTO_RESUME_USAGE_LIMIT: job.autoResumeUsageLimit ? "1" : "0",
       PI_AUTO_RESTART_CODEX: job.autoRestartCodex ? "1" : "0",
-      PI_CODEX_SESSION_ID: candidate.sessionId,
+      PI_CODEX_SESSION_ID: input.fresh ? "" : (candidate as RemoteAgentSessionHistoryItem).sessionId,
       PI_RESTART_PARENT_JOB_ID: job.jobId,
       PI_CODEX_MODEL: job.model ?? "",
       PI_CODEX_REASONING_EFFORT: job.reasoningEffort ?? "",
@@ -1574,7 +1790,7 @@ export async function restartRemoteCodexJob(input: {
     ralphMaxIterations: job.ralphMaxIterations,
     autoResumeUsageLimit: job.autoResumeUsageLimit,
     autoRestartCodex: job.autoRestartCodex,
-    codexSessionId: candidate.sessionId,
+    codexSessionId: input.fresh ? undefined : (candidate as RemoteAgentSessionHistoryItem).sessionId,
     model: job.model,
     reasoningEffort: job.reasoningEffort,
   };
@@ -1590,8 +1806,9 @@ export async function restartRemoteCodexJob(input: {
     createdAt: now,
     metadata: {
       parentJobId: job.jobId,
-      codexSessionId: candidate.sessionId,
+      codexSessionId: input.fresh ? null : (candidate as RemoteAgentSessionHistoryItem).sessionId,
       automatic: false,
+      fresh: Boolean(input.fresh),
     },
   });
   await writeStore(store);
@@ -1770,6 +1987,52 @@ export async function archiveRemoteAgentJob(input: {
   return job;
 }
 
+export async function removeRemoteAgentJob(input: {
+  jobId: string;
+  agentId?: string;
+}): Promise<{ removedJobIds: string[] }> {
+  const store = await readStore();
+  const job = store.jobs.find((entry) => entry.jobId === input.jobId);
+  if (!job) {
+    throw new Error(`Unknown remote agent job: ${input.jobId}`);
+  }
+  if (input.agentId && job.agentId !== input.agentId) {
+    throw new Error(`Remote job ${input.jobId} does not belong to agent ${input.agentId}`);
+  }
+
+  const now = new Date().toISOString();
+  const removedJobIds = [...collectJobTree(store, job.jobId)];
+  const removedJobIdSet = new Set(removedJobIds);
+  store.jobs = store.jobs.filter((entry) => !removedJobIdSet.has(entry.jobId));
+  const existingRemovedJobs = store.removedJobs.filter((entry) => !removedJobIdSet.has(entry.jobId));
+  store.removedJobs = [
+    ...removedJobIds.map((jobId) => ({
+      jobId,
+      agentId: job.agentId,
+      removedAt: now,
+      reason: "session_removed",
+    })),
+    ...existingRemovedJobs,
+  ].slice(0, 500);
+  store.requests = store.requests.filter((request) => {
+    if (request.parentJobId && removedJobIdSet.has(request.parentJobId)) return false;
+    if (request.createdJobId && removedJobIdSet.has(request.createdJobId)) return false;
+    return true;
+  });
+  appendRemoteEvent(store, {
+    type: "session.removed",
+    agentId: job.agentId,
+    jobId: job.jobId,
+    createdAt: now,
+    severity: "warning",
+    metadata: {
+      removedJobCount: removedJobIds.length,
+    },
+  });
+  await writeStore(store);
+  return { removedJobIds };
+}
+
 export async function reportRemoteAgentJob(input: {
   agentId: string;
   jobId: string;
@@ -1797,6 +2060,9 @@ export async function reportRemoteAgentJob(input: {
   const previousProviderState = job?.providerState?.state;
 
   if (!job) {
+    if (removedJobRecord(store, input.jobId)) {
+      throw new Error(`Remote agent job was removed: ${input.jobId}`);
+    }
     if (!agent) {
       throw new Error(`Unknown remote agent: ${input.agentId}`);
     }
@@ -2042,13 +2308,35 @@ export async function pollRemoteAgent(agentId: string): Promise<{
   resolvedRequests: RemoteApprovalRequestRecord[];
   pendingJobs: RemoteAgentJob[];
   jobs: RemoteAgentJob[];
+  removedJobIds: string[];
+  controlCommands: RemoteAgentControlCommandRecord[];
 }> {
   const store = await normalizeStore();
   const agent = store.agents.find((entry) => entry.agentId === agentId);
   if (!agent) {
+    const removed = removedAgentRecord(store, agentId);
+    if (removed) {
+      return {
+        agent: stoppedRemovedAgent(removed),
+        pendingRequests: [],
+        resolvedRequests: [],
+        pendingJobs: [],
+        jobs: [],
+        removedJobIds: [],
+        controlCommands: [],
+      };
+    }
     throw new Error(`Unknown remote agent: ${agentId}`);
   }
 
+  const now = new Date().toISOString();
+  const controlCommands = (store.controlCommands ?? []).filter(
+    (entry) => entry.agentId === agentId && entry.status === "pending",
+  );
+  for (const command of controlCommands) {
+    command.status = "delivered";
+    command.deliveredAt = now;
+  }
   agent.lastSeenAt = new Date().toISOString();
   await writeStore(store);
 
@@ -2062,6 +2350,10 @@ export async function pollRemoteAgent(agentId: string): Promise<{
     ),
     pendingJobs: store.jobs.filter((entry) => entry.agentId === agentId && isReadyToLaunch(entry)),
     jobs: store.jobs.filter((entry) => entry.agentId === agentId && !entry.archivedAt),
+    removedJobIds: store.removedJobs
+      .filter((entry) => entry.agentId === agentId)
+      .map((entry) => entry.jobId),
+    controlCommands,
   };
 }
 

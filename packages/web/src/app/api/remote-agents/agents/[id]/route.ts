@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
-import { updateRemoteAgentDetails, forgetRemoteAgent } from "@/lib/remote-agents";
+import { updateRemoteAgentDetails, forgetRemoteAgent, removeRemoteAgent } from "@/lib/remote-agents";
 
 export async function DELETE(
   request: NextRequest,
@@ -9,6 +9,14 @@ export async function DELETE(
   const correlationId = getCorrelationId(request);
   try {
     const { id } = await props.params;
+    const body = (await request.json().catch(() => ({}))) as {
+      force?: boolean;
+      removeJobs?: boolean;
+    };
+    if (body.force) {
+      const result = await removeRemoteAgent({ agentId: id, removeJobs: body.removeJobs ?? true });
+      return jsonWithCorrelation({ removed: true, ...result }, { status: 200 }, correlationId);
+    }
     await forgetRemoteAgent(id);
     return jsonWithCorrelation({ forgotten: true }, { status: 200 }, correlationId);
   } catch (error) {
