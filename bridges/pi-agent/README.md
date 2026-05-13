@@ -69,7 +69,9 @@ Companion files (same directory):
 |---|---|
 | `pair` | Connect to PI with a one-time code |
 | `start-daemon` | Start background daemon from saved state |
+| `restart-daemon` | Stop and start the daemon from the same saved state |
 | `stop-daemon` | Stop the background daemon |
+| `cleanup` | Remove stale PID state; optionally kill PI-owned job tmux sessions |
 | `status` | Check daemon health |
 | `context` | Print current daemon identity as JSON |
 | `run` | Run a wrapped command with auto register + heartbeat |
@@ -78,6 +80,14 @@ Companion files (same directory):
 | `request-approval` | Send an approval request to PI and wait |
 | `approve-command` | Wrap a risky command behind PI approval |
 | `handoff-update` | Update session handoff context |
+
+Fresh recovery examples:
+
+```bash
+pi-agent restart-daemon
+pi-agent cleanup --kill-jobs --clear-jobs
+pi-agent restart-daemon
+```
 
 ## Environment variables
 

@@ -2668,6 +2668,39 @@ def run_daemon(args: argparse.Namespace) -> int:
                         pendingJobs=len(polled.get("pendingJobs", [])),
                         pendingRequests=len(polled.get("pendingRequests", [])),
                     )
+                    for command in polled.get("controlCommands", []):
+                        if not isinstance(command, dict):
+                            continue
+                        if command.get("type") != "restart_daemon":
+                            continue
+                        print(json.dumps({
+                            "event": "daemon_restart_requested",
+                            "agentId": agent_id,
+                            "commandId": command.get("commandId"),
+                            "reason": "Restart connection requested from PI",
+                        }, indent=2), flush=True)
+                        dbg.log(
+                            "daemon_restart_requested",
+                            agentId=agent_id,
+                            commandId=command.get("commandId"),
+                        )
+                        dbg.close()
+                        if relay_client is not None:
+                            relay_client.close()
+                            relay_client = None
+                        if terminal_relay_client is not None:
+                            terminal_relay_client.stop()
+                            terminal_relay_client = None
+                        restart_args = [
+                            sys.executable,
+                            __file__,
+                            "daemon",
+                            "--state-file",
+                            str(state_path),
+                            "--heartbeat-ms",
+                            str(heartbeat_ms),
+                        ]
+                        os.execv(sys.executable, restart_args)
                     if relay_client is not None:
                         relay_client.heartbeat()
                         current_state = load_state_file(state_path)
@@ -2754,6 +2787,40 @@ def run_daemon(args: argparse.Namespace) -> int:
 
             for job in polled.get("pendingJobs", []):
                 launch_remote_job(job)
+
+            removed_job_ids = {
+                str(job_id)
+                for job_id in polled.get("removedJobIds", [])
+                if isinstance(job_id, str) and job_id
+            }
+            for job_id in list(removed_job_ids):
+                job_state = launched_jobs.pop(job_id, None)
+                if not job_state:
+                    continue
+                if job_state.get("kind") == "tmux":
+                    subprocess.run(
+                        ["tmux", "kill-session", "-t", str(job_state.get("sessionName", ""))],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                    )
+                else:
+                    process = job_state.get("process")
+                    if process is not None:
+                        try:
+                            process.terminate()
+                        except Exception:
+                            pass
+                print(
+                    json.dumps(
+                        {
+                            "event": "remote_job_removed",
+                            "jobId": job_id,
+                            "reason": "removed_in_pi",
+                        },
+                        indent=2,
+                    )
+                )
 
             for job in polled.get("jobs", []):
                 job_id = job.get("jobId")
@@ -3257,6 +3324,82 @@ def stop_daemon(args: argparse.Namespace) -> int:
     return 1
 
 
+def restart_daemon(args: argparse.Namespace) -> int:
+    """Hard restart the local daemon from its saved pairing state."""
+    stop_result = stop_daemon(args)
+    if stop_result != 0:
+        return stop_result
+    return start_daemon(args)
+
+
+def kill_tmux_session_if_present(session_name: str) -> bool:
+    if not session_name or not tmux_available() or not tmux_has_session(session_name):
+        return False
+    subprocess.run(
+        ["tmux", "kill-session", "-t", session_name],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return True
+
+
+def cleanup_daemon(args: argparse.Namespace) -> int:
+    """Clean local pi-agent state after a broken or stale connection."""
+    state_path = resolve_state_file(args)
+    pid_path = pid_file_path(state_path)
+    state = load_state_file(state_path)
+    pid = read_pid(pid_path)
+    stale_pid_removed = False
+    if pid and not process_is_alive(pid):
+        remove_file_if_exists(pid_path)
+        stale_pid_removed = True
+
+    killed_sessions: list[str] = []
+    if getattr(args, "kill_jobs", False):
+        # Kill only PI-owned tmux sessions. This is intentionally scoped to the
+        # deterministic prefix created by tmux_session_name(), not arbitrary tmux.
+        if tmux_available():
+            result = subprocess.run(
+                ["tmux", "list-sessions", "-F", "#{session_name}"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            if result.returncode == 0:
+                for raw in result.stdout.decode("utf-8", errors="replace").splitlines():
+                    session_name = raw.strip()
+                    if session_name.startswith("pi_remote_") and kill_tmux_session_if_present(session_name):
+                        killed_sessions.append(session_name)
+
+    cleared_jobs = False
+    if getattr(args, "clear_jobs", False):
+        state["pendingJobs"] = []
+        state["jobs"] = []
+        state["pendingRequests"] = []
+        state["resolvedRequests"] = []
+        state["connectionState"] = "stopped"
+        state["lastError"] = None
+        state["nextRetryAt"] = None
+        write_state_file(state_path, state)
+        cleared_jobs = True
+
+    print(
+        json.dumps(
+            {
+                "cleaned": True,
+                "stateFile": str(state_path),
+                "pidFile": str(pid_path),
+                "stalePidRemoved": stale_pid_removed,
+                "killedTmuxSessions": killed_sessions,
+                "clearedLocalJobCache": cleared_jobs,
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
 def status_daemon(args: argparse.Namespace) -> int:
     print(json.dumps(serialize_service_status(args), indent=2))
     return 0
@@ -3485,7 +3628,14 @@ def build_parser() -> argparse.ArgumentParser:
     start_daemon_parser.add_argument("--heartbeat-ms")
     start_daemon_parser.add_argument("--debug", action="store_true", help="Run daemon in foreground with verbose debug output")
 
+    restart_daemon_parser = subparsers.add_parser("restart-daemon", parents=[common])
+    restart_daemon_parser.add_argument("--heartbeat-ms")
+    restart_daemon_parser.add_argument("--debug", action="store_true", help="Restart into foreground debug mode")
+
     subparsers.add_parser("stop-daemon", parents=[common])
+    cleanup_parser = subparsers.add_parser("cleanup", parents=[common])
+    cleanup_parser.add_argument("--kill-jobs", action="store_true", help="Kill local PI-owned tmux job sessions")
+    cleanup_parser.add_argument("--clear-jobs", action="store_true", help="Clear cached local job/request state")
     subparsers.add_parser("status", parents=[common])
     subparsers.add_parser("context", parents=[common])
 
@@ -3575,8 +3725,12 @@ def main() -> None:
         raise SystemExit(run_daemon(args))
     if args.command == "start-daemon":
         raise SystemExit(start_daemon(args))
+    if args.command == "restart-daemon":
+        raise SystemExit(restart_daemon(args))
     if args.command == "stop-daemon":
         raise SystemExit(stop_daemon(args))
+    if args.command == "cleanup":
+        raise SystemExit(cleanup_daemon(args))
     if args.command == "status":
         raise SystemExit(status_daemon(args))
     if args.command == "context":
