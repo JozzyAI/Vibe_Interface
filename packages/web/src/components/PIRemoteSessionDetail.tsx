@@ -8,6 +8,7 @@ import type {
   RemoteApprovalOverview,
   RemoteApprovalRequest,
 } from "@/lib/types";
+import Link from "next/link";
 import { DirectTerminal } from "./DirectTerminal";
 import { RemoteLogTerminal } from "./RemoteLogTerminal";
 
@@ -699,9 +700,9 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
     return (
       <div className="rounded-3xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6">
         <h1 className="text-[24px] font-semibold text-[var(--color-text-primary)]">Remote session not found</h1>
-        <a href="/sessions" className="mt-4 inline-flex rounded-full border px-4 py-2 text-[12px] font-semibold hover:no-underline">
+        <Link href="/sessions" className="mt-4 inline-flex rounded-full border px-4 py-2 text-[12px] font-semibold hover:no-underline">
           Back to Sessions
-        </a>
+        </Link>
       </div>
     );
   }
@@ -711,9 +712,9 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
       <section className="hidden min-w-0 rounded-[2rem] border border-[var(--color-border-default)] bg-[radial-gradient(circle_at_top_left,rgba(97,102,204,0.15),transparent_34%),var(--color-bg-surface)] p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <a href="/sessions" className="text-[12px] font-medium text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:no-underline">
+            <Link href="/sessions" className="text-[12px] font-medium text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:no-underline">
               Back to Sessions
-            </a>
+            </Link>
             <p className="mt-5 text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
               Remote CLI session / {agent.displayName}
             </p>

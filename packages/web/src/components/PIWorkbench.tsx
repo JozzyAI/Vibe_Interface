@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import type {
   DashboardSession,
   PIIdeaBoardData,
@@ -308,14 +309,14 @@ export function PIWorkbench({
           </RailLink>
           {/* <RailLink href="/ideas" label="Drafts">#</RailLink> */}
         </nav>
-        <a href="/agents" className="mb-2 text-[11px] font-semibold text-[#8a8f99] hover:no-underline">
+        <Link href="/agents" className="mb-2 text-[11px] font-semibold text-[#8a8f99] hover:no-underline">
           Help
-        </a>
+        </Link>
       </aside>
 
       <aside className="hidden w-[320px] shrink-0 flex-col border-r border-[#ececea] bg-white lg:flex">
         <div className="flex h-16 items-center gap-3 border-b border-[#ececea] px-4">
-          <a href="/" className="text-[22px] text-[#7b808a] hover:no-underline">‹</a>
+          <Link href="/" className="text-[22px] text-[#7b808a] hover:no-underline">‹</Link>
           <div className="grid h-8 w-8 place-items-center rounded-lg bg-[#0b8ea6] text-[11px] font-bold text-white">
             PI
           </div>
@@ -337,13 +338,13 @@ export function PIWorkbench({
           <div className="grid gap-2 rounded-xl border border-[#e8e8e5] bg-[#fbfbfa] p-3 text-[12px] leading-5 text-[#737882]">
             <p className="font-semibold text-[#30333a]">Next step</p>
             {connectedAgents.length === 0 ? (
-              <a href="/agents" className="font-semibold text-[#0b8ea6] hover:no-underline">
+              <Link href="/agents" className="font-semibold text-[#0b8ea6] hover:no-underline">
                 Connect your first machine
-              </a>
+              </Link>
             ) : pendingApprovals.length > 0 ? (
-              <a href="/sessions" className="font-semibold text-[#9a6b00] hover:no-underline">
+              <Link href="/sessions" className="font-semibold text-[#9a6b00] hover:no-underline">
                 Open blocked session{pendingApprovals.length === 1 ? "" : "s"}
-              </a>
+              </Link>
             ) : (
               <span>Start a task or resume a saved session.</span>
             )}
@@ -359,19 +360,19 @@ export function PIWorkbench({
             <p className="mt-2">{connectedAgents.length} machine{connectedAgents.length === 1 ? "" : "s"} online</p>
             <p>{activeJobs.length} session{activeJobs.length === 1 ? "" : "s"} running</p>
             <p>{pendingApprovals.length} need approval</p>
-            <a
+            <Link
               href="/sessions"
               className="mt-4 inline-flex rounded-full border border-[#dedfdf] px-3 py-1.5 text-[12px] font-semibold text-[#5f4fb8] hover:no-underline"
             >
               Open Sessions
-            </a>
+            </Link>
           </div>
         </div>
 
         <div className="hidden">
-          <a href="/agents" className="hover:no-underline" title="Agents">⌁</a>
-          <a href="/approval-hub" className="hover:no-underline" title="Approvals">♢</a>
-          <a href="/ideas" className="hover:no-underline" title="Ideas">☾</a>
+          <Link href="/agents" className="hover:no-underline" title="Agents">⌁</Link>
+          <Link href="/approval-hub" className="hover:no-underline" title="Approvals">♢</Link>
+          <Link href="/ideas" className="hover:no-underline" title="Ideas">☾</Link>
           <span title="Activity">⌁</span>
         </div>
       </aside>
@@ -527,7 +528,7 @@ export function PIWorkbench({
             {pendingApprovals.length > 0 ? (
               <div className="mx-auto mt-5 flex max-w-[760px] items-center justify-between rounded-2xl border border-[#e8c46a] bg-[#fff8e7] px-4 py-3 text-[13px]">
                 <span>{pendingApprovals.length} approval request waiting</span>
-                <a href="/sessions" className="font-semibold text-[#7b5d00] hover:no-underline">Open sessions</a>
+                <Link href="/sessions" className="font-semibold text-[#7b5d00] hover:no-underline">Open sessions</Link>
               </div>
             ) : null}
               </div>
@@ -536,7 +537,7 @@ export function PIWorkbench({
                 <InfoPanel title="Needs attention" count={pendingApprovals.length}>
                   {pendingApprovals.length > 0 ? (
                     pendingApprovals.slice(0, 3).map((request) => (
-                      <a
+                      <Link
                         key={request.requestId}
                         href="/approval-hub"
                         className="block rounded-2xl border border-[#e8c46a] bg-[#fff8e7] p-4 hover:no-underline"
@@ -547,7 +548,7 @@ export function PIWorkbench({
                         <p className="mt-1 text-[12px] text-[#756232]">
                           Waiting {formatRelativeTime(request.createdAt)}
                         </p>
-                      </a>
+                      </Link>
                     ))
                   ) : (
                     <EmptyState>Nothing needs your attention.</EmptyState>
@@ -557,7 +558,7 @@ export function PIWorkbench({
                 <InfoPanel title="Running now" count={activeJobs.length}>
                   {activeJobs.length > 0 ? (
                     activeJobs.slice(0, 4).map((job) => (
-                      <a
+                      <Link
                         key={job.jobId}
                         href={`/remote-sessions/${encodeURIComponent(job.jobId)}`}
                         className="block rounded-2xl border border-[#e7e7e4] bg-[#fbfbfa] p-4 hover:no-underline"
@@ -568,7 +569,7 @@ export function PIWorkbench({
                         <p className="mt-1 text-[12px] text-[#737882]">
                           {job.status} - {formatRelativeTime(job.updatedAt)}
                         </p>
-                      </a>
+                      </Link>
                     ))
                   ) : (
                     <EmptyState>No running tasks yet.</EmptyState>
@@ -578,7 +579,7 @@ export function PIWorkbench({
                 <InfoPanel title="Connected machines" count={connectedAgents.length}>
                   {connectedAgents.length > 0 ? (
                     connectedAgents.slice(0, 4).map((agent) => (
-                      <a
+                      <Link
                         key={agent.agentId}
                         href="/agents"
                         className="flex items-center justify-between rounded-2xl border border-[#e7e7e4] bg-[#fbfbfa] p-4 hover:no-underline"
@@ -592,15 +593,15 @@ export function PIWorkbench({
                         <span className="rounded-full border border-[#25a55f] px-2.5 py-1 text-[11px] font-semibold text-[#25a55f]">
                           online
                         </span>
-                      </a>
+                      </Link>
                     ))
                   ) : (
-                    <a
+                    <Link
                       href="/agents"
                       className="block rounded-2xl border border-dashed border-[#dedfdf] p-4 text-[13px] text-[#626873] hover:no-underline"
                     >
                       No machines connected. Connect a machine to run tasks.
-                    </a>
+                    </Link>
                   )}
                 </InfoPanel>
               </div>
@@ -655,7 +656,7 @@ function RailLink({
   children: ReactNode;
 }) {
   return (
-    <a
+    <Link
       href={href}
       className="grid w-[64px] justify-items-center gap-1 rounded-2xl px-1 py-2 text-center text-[10px] font-semibold text-[#68707c] hover:bg-[#f4f5f5] hover:no-underline"
       aria-current={active ? "page" : undefined}
@@ -671,7 +672,7 @@ function RailLink({
         {children}
       </span>
       <span>{label}</span>
-    </a>
+    </Link>
   );
 }
 

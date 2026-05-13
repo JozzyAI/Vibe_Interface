@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import type { ProjectInfo } from "@/lib/project-name";
 
 type ActiveArea = "home" | "sessions" | "tasks" | "agents" | "drafts" | "approvals";
@@ -43,12 +44,10 @@ function RailIcon({
   children: ReactNode;
 }) {
   return (
-    <a
+    <Link
       href={href}
       title={label}
-      className={[
-        "grid w-[64px] justify-items-center gap-1 rounded-2xl px-1 py-2 text-center text-[10px] font-semibold text-[#5f4fb8] hover:bg-[#f4f5f5] hover:no-underline",
-      ].join(" ")}
+      className="grid w-[64px] justify-items-center gap-1 rounded-2xl px-1 py-2 text-center text-[10px] font-semibold text-[#5f4fb8] hover:bg-[#f4f5f5] hover:no-underline"
     >
       <span
         className={[
@@ -61,7 +60,7 @@ function RailIcon({
         {children}
       </span>
       <span>{label}</span>
-    </a>
+    </Link>
   );
 }
 
@@ -84,12 +83,12 @@ export function PIWorkspaceShell({
   return (
     <div className="flex h-screen overflow-hidden bg-[#fbfbfa] text-[#1e2026]">
       <aside className="flex w-[70px] shrink-0 flex-col items-center border-r border-[#ececea] bg-white py-2">
-        <a
+        <Link
           href="/"
           className="mb-3 grid h-12 w-12 place-items-center rounded-2xl border border-[#9ed9e5] bg-[#0b8ea6] text-[13px] font-bold text-white shadow-sm hover:no-underline"
         >
           PI
-        </a>
+        </Link>
         <nav className="flex flex-1 flex-col items-center gap-3">
           <RailIcon href="/" label="Home" active={active === "home"}>+</RailIcon>
           <RailIcon href="/sessions" label="Sessions" active={active === "sessions" || active === "tasks" || active === "approvals"}>=</RailIcon>
@@ -100,9 +99,9 @@ export function PIWorkspaceShell({
 
       <aside className="flex w-[352px] shrink-0 flex-col border-r border-[#ececea] bg-white">
         <div className="flex h-16 items-center gap-3 border-b border-[#ececea] px-4">
-          <a href="/" className="text-[22px] text-[#7b808a] hover:no-underline">
+          <Link href="/" className="text-[22px] text-[#7b808a] hover:no-underline">
             &lt;
-          </a>
+          </Link>
           <div className="grid h-8 w-8 place-items-center rounded-lg bg-[#0b8ea6] text-[11px] font-bold text-white">
             PI
           </div>
@@ -113,26 +112,26 @@ export function PIWorkspaceShell({
         </div>
 
         <div className="hidden">
-          <a href="/" className={navClass(active === "home")}>
+          <Link href="/" className={navClass(active === "home")}>
             <span className="text-[18px]">+</span>
             Home
-          </a>
-          <a href="/tasks" className={navClass(active === "tasks")}>
+          </Link>
+          <Link href="/tasks" className={navClass(active === "tasks")}>
             <span className="text-[14px]">TK</span>
             Tasks
-          </a>
-          <a href="/agents" className={navClass(active === "agents")}>
+          </Link>
+          <Link href="/agents" className={navClass(active === "agents")}>
             <span className="text-[14px]">●</span>
             Machines
-          </a>
-          <a href="/ideas" className={navClass(active === "drafts")}>
+          </Link>
+          <Link href="/ideas" className={navClass(active === "drafts")}>
             <span className="text-[14px]">◆</span>
             Drafts
-          </a>
-          <a href="/approval-hub" className={navClass(active === "approvals")}>
+          </Link>
+          <Link href="/approval-hub" className={navClass(active === "approvals")}>
             <span className="text-[14px]">!</span>
             Approvals
-          </a>
+          </Link>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">

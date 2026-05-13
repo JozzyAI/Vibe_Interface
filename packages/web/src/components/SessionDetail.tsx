@@ -16,6 +16,7 @@ import {
 
 import { cn } from "@/lib/cn";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { getSessionTitle } from "@/lib/format";
 import type { ProjectInfo } from "@/lib/project-name";
 
@@ -918,11 +919,11 @@ export function SessionDetail({
     <div className="session-detail--terminal-first">
       {/* Floating header */}
       <div className="session-detail__floating-header">
-        <a href={crumbHref} className="session-detail__back" aria-label="Back to dashboard">
+        <Link href={crumbHref} className="session-detail__back" aria-label="Back to dashboard">
           <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
-        </a>
+        </Link>
         <span className="session-detail__status-dot" style={{ background: activity.color }} />
         <span className="session-detail__session-id">{session.id}</span>
         <span
