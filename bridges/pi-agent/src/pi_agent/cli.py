@@ -31,6 +31,9 @@ except ImportError:  # pragma: no cover
     TerminalRelayClient = None  # type: ignore[assignment,misc]
     derive_terminal_relay_url = None  # type: ignore[assignment]
 
+AUTH_CONNECTOR_CACHE_SECONDS = 60.0
+_auth_connector_cache: tuple[float, list[dict[str, Any]]] | None = None
+
 
 def normalize_server(server: str) -> str:
     return server.rstrip("/")
@@ -734,6 +737,11 @@ def collect_codex_session_history(limit: int = 12) -> list[dict[str, Any]]:
 
 
 def collect_auth_connectors() -> list[dict[str, Any]]:
+    global _auth_connector_cache
+    now = time.monotonic()
+    if _auth_connector_cache and now - _auth_connector_cache[0] < AUTH_CONNECTOR_CACHE_SECONDS:
+        return [dict(connector) for connector in _auth_connector_cache[1]]
+
     connectors: list[dict[str, Any]] = []
     gh_path = shutil.which("gh")
     if not gh_path:
@@ -747,7 +755,8 @@ def collect_auth_connectors() -> list[dict[str, Any]]:
                 "checkedAt": iso_now(),
             }
         )
-        return connectors
+        _auth_connector_cache = (now, connectors)
+        return [dict(connector) for connector in connectors]
 
     try:
         result = subprocess.run(
@@ -788,7 +797,8 @@ def collect_auth_connectors() -> list[dict[str, Any]]:
                 "checkedAt": iso_now(),
             }
         )
-    return connectors
+    _auth_connector_cache = (now, connectors)
+    return [dict(connector) for connector in connectors]
 
 
 def should_allocate_pty(command: list[str]) -> bool:
@@ -825,6 +835,8 @@ def request_json(
         raw = exc.read().decode("utf-8", errors="replace")
         try:
             payload = json.loads(raw)
+            if isinstance(payload, dict) and payload.get("shouldStop"):
+                return payload
             raise RuntimeError(payload.get("error") or f"Request failed ({exc.code})") from exc
         except json.JSONDecodeError:
             raise RuntimeError(f"Request failed ({exc.code}): {raw}") from exc
@@ -2087,24 +2099,45 @@ def run_daemon(args: argparse.Namespace) -> int:
         relay_state = state.get("relay")
         return relay_state if isinstance(relay_state, dict) else {}
 
+    report_failure_state: dict[str, dict[str, Any]] = {}
+
     def safe_report_job(job_id: str, status: str, **extra: Any) -> bool:
+        failure_key = f"{job_id}:{status}"
+        now_ts = time.time()
+        failure_state = report_failure_state.get(failure_key)
+        if failure_state and now_ts < float(failure_state.get("nextRetryAt", 0)):
+            return False
         dbg.log("job_status", jobId=job_id, status=status, **{k: v for k, v in extra.items() if k != "logTail"})
         try:
-            report_job(args, job_id, status, **extra)
+            response = report_job(args, job_id, status, **extra)
+            if isinstance(response, dict) and response.get("shouldStop"):
+                dbg.log("job_report_stop_requested", jobId=job_id, status=status)
+                launched_jobs.pop(job_id, None)
+                return False
+            report_failure_state.pop(failure_key, None)
             return True
         except Exception as error:
-            dbg.log("job_report_failed", jobId=job_id, status=status, error=str(error))
-            print(
-                json.dumps(
-                    {
-                        "event": "remote_job_report_failed",
-                        "jobId": job_id,
-                        "status": status,
-                        "error": str(error),
-                    },
-                    indent=2,
+            count = int((failure_state or {}).get("count", 0)) + 1
+            retry_in = min(60.0, max(interval_s, 2.0 ** min(count, 5)))
+            report_failure_state[failure_key] = {
+                "count": count,
+                "nextRetryAt": now_ts + retry_in,
+                "error": str(error),
+            }
+            dbg.log("job_report_failed", jobId=job_id, status=status, error=str(error), count=count, retryIn=retry_in)
+            if count in {1, 2, 3} or count % 5 == 0:
+                print(
+                    json.dumps(
+                        {
+                            "event": "remote_job_report_failed",
+                            "jobId": job_id,
+                            "status": status,
+                            "error": str(error),
+                            "retryInSeconds": round(retry_in, 1),
+                        },
+                        indent=2,
+                    )
                 )
-            )
             return False
 
     def request_pi_utility_session_from_runtime(job_id: str, screen: str) -> None:
@@ -2661,6 +2694,14 @@ def run_daemon(args: argparse.Namespace) -> int:
                         dbg.log("daemon_stop_requested", agentId=agent_id, reason="paused_in_pi")
                         raise KeyboardInterrupt
                     polled = poll_agent(heartbeat_args)
+                    if polled.get("shouldStop"):
+                        print(json.dumps({
+                            "event": "daemon_stop_requested",
+                            "agentId": agent_id,
+                            "reason": "Agent removed or disconnected in PI",
+                        }, indent=2), flush=True)
+                        dbg.log("daemon_stop_requested", agentId=agent_id, reason="poll_should_stop")
+                        raise KeyboardInterrupt
                     dbg.log(
                         "heartbeat",
                         agentId=agent_id,

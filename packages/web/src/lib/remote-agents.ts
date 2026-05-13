@@ -128,6 +128,7 @@ function defaultStore(): RemoteAgentStore {
 }
 
 let lastGoodStore: RemoteAgentStore | null = null;
+let storeWriteQueue: Promise<void> = Promise.resolve();
 
 async function storePath(): Promise<string> {
   const { config } = await getServices();
@@ -157,11 +158,16 @@ async function readStore(): Promise<RemoteAgentStore> {
 
 async function writeStore(store: RemoteAgentStore): Promise<void> {
   const path = await storePath();
-  await mkdir(dirname(path), { recursive: true });
-  const tempPath = `${path}.${Date.now()}.${randomUUID()}.tmp`;
-  await writeFile(tempPath, JSON.stringify(store, null, 2), "utf8");
-  await rename(tempPath, path);
-  lastGoodStore = store;
+  const payload = JSON.stringify(store, null, 2);
+  const write = async () => {
+    await mkdir(dirname(path), { recursive: true });
+    const tempPath = `${path}.${Date.now()}.${randomUUID()}.tmp`;
+    await writeFile(tempPath, payload, "utf8");
+    await rename(tempPath, path);
+    lastGoodStore = store;
+  };
+  storeWriteQueue = storeWriteQueue.then(write, write);
+  await storeWriteQueue;
 }
 
 function appendRemoteEvent(
@@ -2058,6 +2064,29 @@ export async function reportRemoteAgentJob(input: {
   const agent = store.agents.find((entry) => entry.agentId === input.agentId);
   const previousStatus = job?.status;
   const previousProviderState = job?.providerState?.state;
+  const previousUpdatedAt = job?.updatedAt;
+  const previousReportSignature = job
+    ? JSON.stringify({
+        status: job.status,
+        pid: job.pid ?? null,
+        tmuxSession: job.tmuxSession ?? null,
+        exitCode: job.exitCode ?? null,
+        logFile: job.logFile ?? null,
+        logTail: job.logTail ?? null,
+        providerState: job.providerState
+          ? {
+              state: job.providerState.state,
+              source: job.providerState.source,
+              reason: job.providerState.reason,
+              confidence: job.providerState.confidence,
+            }
+          : null,
+        artifactsDir: job.artifactsDir ?? null,
+        handoff: job.handoff ?? null,
+        error: job.error ?? null,
+        pendingInputs: job.pendingInputs ?? [],
+      })
+    : null;
 
   if (!job) {
     if (removedJobRecord(store, input.jobId)) {
@@ -2183,6 +2212,36 @@ export async function reportRemoteAgentJob(input: {
     maybeQueueRalphIteration(store, job);
   }
   maybeQueueCodexRestartResume(store, job);
+
+  const nextReportSignature = JSON.stringify({
+    status: job.status,
+    pid: job.pid ?? null,
+    tmuxSession: job.tmuxSession ?? null,
+    exitCode: job.exitCode ?? null,
+    logFile: job.logFile ?? null,
+    logTail: job.logTail ?? null,
+    providerState: job.providerState
+      ? {
+          state: job.providerState.state,
+          source: job.providerState.source,
+          reason: job.providerState.reason,
+          confidence: job.providerState.confidence,
+        }
+      : null,
+    artifactsDir: job.artifactsDir ?? null,
+    handoff: job.handoff ?? null,
+    error: job.error ?? null,
+    pendingInputs: job.pendingInputs ?? [],
+  });
+  const isNoisyRunningRefresh =
+    input.status === "running" &&
+    previousStatus === "running" &&
+    previousReportSignature === nextReportSignature &&
+    typeof previousUpdatedAt === "string" &&
+    Date.now() - Date.parse(previousUpdatedAt) < 2000;
+  if (isNoisyRunningRefresh) {
+    return job;
+  }
 
   await writeStore(store);
   return job;
