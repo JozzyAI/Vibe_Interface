@@ -740,6 +740,7 @@ function MachineRow({
   const [resumingSessionId, setResumingSessionId] = useState<string | null>(null);
   const [copiedReconnect, setCopiedReconnect] = useState(false);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
+  const [lifecycleMessage, setLifecycleMessage] = useState<string | null>(null);
   const [reconnectCode, setReconnectCode] = useState<{ code: string; command: string; advancedCommand: string; relayUrl: string } | null>(null);
   const [copiedReconnectCode, setCopiedReconnectCode] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -747,13 +748,13 @@ function MachineRow({
   const codexSessions = agent.sessionHistory ?? [];
   const reconnect = reconnectCommand(agent, serverOrigin);
   const recentJobs = [...jobs].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 5);
-  const activeJobs = jobs.filter((job) => job.status === "running" || job.status === "queued");
 
   const disconnectMachine = () =>
     startTransition(() => {
       void (async () => {
         try {
           setLifecycleError(null);
+          setLifecycleMessage(null);
           await requestJson(`/api/remote-agents/agents/${encodeURIComponent(agent.agentId)}/disconnect`, { method: "POST" });
           await onRefresh();
         } catch (err) {
@@ -762,26 +763,40 @@ function MachineRow({
       })();
     });
 
-  const forgetMachine = () =>
+  const removeMachine = () =>
     startTransition(() => {
       void (async () => {
         try {
           setLifecycleError(null);
-          if (activeJobs.length > 0) {
-            const ok = window.confirm(
-              `This machine has ${activeJobs.length} active job(s). They must be stopped first. Proceed anyway?`,
-            );
-            if (!ok) return;
-          } else {
-            const ok = window.confirm(
-              `Forget "${agent.displayName}"? This removes the machine from PI. Session history is kept.`,
-            );
-            if (!ok) return;
-          }
-          await requestJson(`/api/remote-agents/agents/${encodeURIComponent(agent.agentId)}`, { method: "DELETE" });
+          setLifecycleMessage(null);
+          const ok = window.confirm(
+            `Remove "${agent.displayName}" from PI? This stops the bridge on its next heartbeat and removes ${jobs.length} PI session record(s) for this machine.`,
+          );
+          if (!ok) return;
+          await requestJson(`/api/remote-agents/agents/${encodeURIComponent(agent.agentId)}`, {
+            method: "DELETE",
+            body: JSON.stringify({ force: true, removeJobs: true }),
+          });
           await onRefresh();
         } catch (err) {
-          setLifecycleError(err instanceof Error ? err.message : "Failed to forget machine");
+          setLifecycleError(err instanceof Error ? err.message : "Failed to remove machine");
+        }
+      })();
+    });
+
+  const restartDaemon = () =>
+    startTransition(() => {
+      void (async () => {
+        try {
+          setLifecycleError(null);
+          setLifecycleMessage(null);
+          await requestJson(`/api/remote-agents/agents/${encodeURIComponent(agent.agentId)}/restart-daemon`, {
+            method: "POST",
+          });
+          setLifecycleMessage("Restart command sent. The bridge should reconnect on its next poll.");
+          await onRefresh();
+        } catch (err) {
+          setLifecycleError(err instanceof Error ? err.message : "Failed to restart connection");
         }
       })();
     });
@@ -791,6 +806,7 @@ function MachineRow({
       void (async () => {
         try {
           setLifecycleError(null);
+          setLifecycleMessage(null);
           setCopiedReconnectCode(false);
           const result = await requestJson<{ enrollment: { code: string }; pairCommand: string; advancedCommand: string; relayUrl: string }>(
             `/api/remote-agents/agents/${encodeURIComponent(agent.agentId)}/reconnect`,
@@ -1055,11 +1071,20 @@ function MachineRow({
           </button>
           <button
             type="button"
+            disabled={isPending || agent.connectionState === "disabled" || agent.connectionState === "disconnected"}
+            onClick={restartDaemon}
+            title="Ask the running bridge daemon to restart itself and reconnect with the same saved pairing state."
+            className="rounded-full border border-[var(--color-border-default)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:border-[var(--color-status-attention)] hover:text-[var(--color-status-attention)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Restart daemon
+          </button>
+          <button
+            type="button"
             disabled={isPending}
-            onClick={forgetMachine}
+            onClick={removeMachine}
             className="rounded-full border border-[var(--color-border-default)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:border-[var(--color-accent-red)] hover:text-[var(--color-accent-red)] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Forget machine
+            Remove machine
           </button>
         </div>
 
@@ -1106,6 +1131,9 @@ function MachineRow({
 
         {lifecycleError ? (
           <p className="mt-3 text-[12px] font-medium text-[var(--color-accent-red)]">{lifecycleError}</p>
+        ) : null}
+        {lifecycleMessage ? (
+          <p className="mt-3 text-[12px] font-medium text-[var(--color-status-success)]">{lifecycleMessage}</p>
         ) : null}
       </div>
     </div>

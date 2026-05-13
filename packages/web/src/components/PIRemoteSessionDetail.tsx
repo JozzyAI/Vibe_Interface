@@ -159,6 +159,8 @@ function remoteEventLabel(event: RemoteAgentEvent): string {
       return "Machine disconnected";
     case "machine.updated":
       return "Machine updated";
+    case "machine.daemon_restart_requested":
+      return "Daemon restart requested";
     case "machine.registered":
       return "Machine registered";
     default:
@@ -442,7 +444,9 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
   const [terminalInput, setTerminalInput] = useState("");
   const [isSendingInput, setIsSendingInput] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
+  const [isRestartingDaemon, setIsRestartingDaemon] = useState(false);
   const [updatingSetting, setUpdatingSetting] = useState<"ralph" | "usage" | "restart" | null>(null);
   const autoApprovalSentRef = useRef<string | null>(null);
 
@@ -599,6 +603,26 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
     }
   };
 
+  const removeSession = async () => {
+    if (!job) return;
+    const confirmed = window.confirm(
+      "Remove this session from PI? This clears the session record and related PI requests. Logs may still exist on the machine.",
+    );
+    if (!confirmed) return;
+    setIsRemoving(true);
+    setError(null);
+    try {
+      await requestJson(`/api/remote-agents/jobs/${encodeURIComponent(job.jobId)}/delete`, {
+        method: "POST",
+        body: JSON.stringify({ agentId: job.agentId }),
+      });
+      window.location.href = "/sessions";
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Failed to remove remote session");
+      setIsRemoving(false);
+    }
+  };
+
   const restartAndResume = async () => {
     if (!job || !agent) return;
     setIsRestarting(true);
@@ -711,6 +735,14 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
               className="rounded-full border border-[var(--color-border-default)] px-3 py-1.5 text-[12px] font-semibold text-[var(--color-text-secondary)] hover:border-[var(--color-accent-red)] hover:text-[var(--color-accent-red)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isArchiving ? "Archiving..." : `Archive ${job.jobId.replace(/^raj_/, "").slice(0, 8)}`}
+            </button>
+            <button
+              type="button"
+              disabled={isRemoving}
+              onClick={() => void removeSession()}
+              className="rounded-full border border-[var(--color-accent-red)]/50 px-3 py-1.5 text-[12px] font-semibold text-[var(--color-accent-red)] hover:bg-[var(--color-accent-red-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isRemoving ? "Removing..." : "Remove"}
             </button>
           </div>
         </div>
@@ -1053,7 +1085,9 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
   const [overview, setOverview] = useState(initialOverview);
   const [error, setError] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
+  const [isRestartingDaemon, setIsRestartingDaemon] = useState(false);
   const [updatingSetting, setUpdatingSetting] = useState<"ralph" | "usage" | "restart" | "model" | null>(null);
   const [updatingPermission, setUpdatingPermission] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState("");
@@ -1263,6 +1297,26 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
     }
   };
 
+  const removeSession = async () => {
+    if (!job) return;
+    const confirmed = window.confirm(
+      "Remove this session from PI? This clears the session record and related PI requests. Logs may still exist on the machine.",
+    );
+    if (!confirmed) return;
+    setIsRemoving(true);
+    setError(null);
+    try {
+      await requestJson(`/api/remote-agents/jobs/${encodeURIComponent(job.jobId)}/delete`, {
+        method: "POST",
+        body: JSON.stringify({ agentId: job.agentId }),
+      });
+      window.location.href = "/sessions";
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Failed to remove");
+      setIsRemoving(false);
+    }
+  };
+
   const restartAndResume = async () => {
     if (!job || !agent) return;
     setIsRestarting(true);
@@ -1279,6 +1333,45 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Failed to restart");
       setIsRestarting(false);
+    }
+  };
+
+  const restartFresh = async () => {
+    if (!job || !agent) return;
+    const confirmed = window.confirm(
+      "Start a fresh Codex process for this session? This does not resume the old Codex conversation.",
+    );
+    if (!confirmed) return;
+    setIsRestarting(true);
+    setError(null);
+    try {
+      const response = await requestJson<{ job: RemoteAgentJob }>(
+        `/api/remote-agents/jobs/${encodeURIComponent(job.jobId)}/restart`,
+        {
+          method: "POST",
+          body: JSON.stringify({ agentId: agent.agentId, fresh: true }),
+        },
+      );
+      window.location.href = `/remote-sessions/${encodeURIComponent(response.job.jobId)}`;
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Failed to start fresh session");
+      setIsRestarting(false);
+    }
+  };
+
+  const restartDaemon = async () => {
+    if (!agent) return;
+    setIsRestartingDaemon(true);
+    setError(null);
+    try {
+      await requestJson(`/api/remote-agents/agents/${encodeURIComponent(agent.agentId)}/restart-daemon`, {
+        method: "POST",
+      });
+      setOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview"));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Failed to restart daemon");
+    } finally {
+      setIsRestartingDaemon(false);
     }
   };
 
@@ -1357,6 +1450,27 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
           {job.nextResumeAt ? <p>Auto resume: {formatRelativeTime(job.nextResumeAt)}</p> : null}
           {job.logFile ? <p className="truncate">Log: {job.logFile}</p> : null}
         </div>
+
+        <button
+          type="button"
+          disabled={
+            isRestartingDaemon ||
+            agent.connectionState === "disabled" ||
+            agent.connectionState === "disconnected"
+          }
+          onClick={() => void restartDaemon()}
+          className="mt-3 w-full rounded-full border border-[#e4e4e0] bg-white px-3 py-2 text-[12px] font-semibold text-[#444852] hover:border-[var(--color-status-attention)] hover:text-[var(--color-status-attention)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isRestartingDaemon ? "Restarting daemon..." : "Restart connection"}
+        </button>
+        <button
+          type="button"
+          disabled={isRestarting || !isCodexJob}
+          onClick={() => void restartFresh()}
+          className="mt-2 w-full rounded-full border border-[#e4e4e0] bg-white px-3 py-2 text-[12px] font-semibold text-[#444852] hover:border-[#5964d8] hover:text-[#5964d8] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isRestarting ? "Starting..." : "Fresh restart session"}
+        </button>
 
         {SHOW_HANDOFF_CONTROLS ? (
         <div className="mt-4 rounded-2xl border border-[#e4e4e0] bg-white p-3">
@@ -1622,14 +1736,24 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
       </div>
 
       <div className="border-t border-[#ececea] p-5">
-        <button
-          type="button"
-          disabled={isArchiving}
-          onClick={() => void archiveSession()}
-          className="w-full rounded-full border border-[#e4e4e0] px-4 py-2 text-[12px] font-semibold text-[#444852] hover:border-[var(--color-accent-red)] hover:text-[var(--color-accent-red)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isArchiving ? "Archiving..." : `Archive ${job.jobId.replace(/^raj_/, "").slice(0, 8)}`}
-        </button>
+        <div className="grid gap-2">
+          <button
+            type="button"
+            disabled={isArchiving || isRemoving}
+            onClick={() => void archiveSession()}
+            className="w-full rounded-full border border-[#e4e4e0] px-4 py-2 text-[12px] font-semibold text-[#444852] hover:border-[var(--color-accent-red)] hover:text-[var(--color-accent-red)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isArchiving ? "Archiving..." : `Archive ${job.jobId.replace(/^raj_/, "").slice(0, 8)}`}
+          </button>
+          <button
+            type="button"
+            disabled={isArchiving || isRemoving}
+            onClick={() => void removeSession()}
+            className="w-full rounded-full border border-[var(--color-accent-red)]/50 px-4 py-2 text-[12px] font-semibold text-[var(--color-accent-red)] hover:bg-[var(--color-accent-red-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isRemoving ? "Removing..." : `Remove ${job.jobId.replace(/^raj_/, "").slice(0, 8)}`}
+          </button>
+        </div>
       </div>
     </div>
   );
