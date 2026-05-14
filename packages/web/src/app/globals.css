@@ -485,7 +485,7 @@ a:hover {
 }
 
 .xterm .xterm-viewport {
-  overflow-y: scroll;
+  overflow-y: overlay !important;
 }
 
 .xterm .xterm-viewport::-webkit-scrollbar {

@@ -136,7 +136,6 @@ export function DirectTerminal({
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [reloadError, setReloadError] = useState<string | null>(null);
-  const [hasNewOutput, setHasNewOutput] = useState(false);
 
   // Update URL when fullscreen changes
   useEffect(() => {
@@ -222,7 +221,6 @@ export function DirectTerminal({
           minimumContrastRatio: isDark ? 1 : 7,
           scrollback: 10000,
           allowProposedApi: true,
-          fastScrollModifier: "shift",
           fastScrollSensitivity: 8,
           scrollSensitivity: 3,
           macOptionIsMeta: true,
@@ -280,108 +278,65 @@ export function DirectTerminal({
         // Fit terminal to container
         fit.fit();
 
-        // ── Write buffering: preserve scroll position and selection ──
-        // xterm.js write() always forces the viewport to the bottom.
-        // We buffer incoming data when:
-        //   (a) the user has an active text selection (to keep highlight visible), or
-        //   (b) the user has manually scrolled up (to preserve their scroll position).
-        // In case (b) we also show a "new output" indicator button.
-        const writeBuffer: string[] = [];
-        let selectionActive = false;
-        let userScrolledUp = false;
-        let safetyTimer: ReturnType<typeof setTimeout> | null = null;
-        let bufferBytes = 0;
-        const MAX_BUFFER_BYTES = 1_048_576; // 1 MB
-
-        const isAtBottom = () => {
-          const buf = terminal.buffer.active;
-          return buf.viewportY >= buf.length - terminal.rows;
+        // Copy via native clipboard event — no clearSelection() so highlight stays.
+        const handleCopy = (e: ClipboardEvent) => {
+          const selection = terminal.getSelection();
+          if (!selection) return;
+          e.preventDefault();
+          e.clipboardData?.setData("text/plain", selection);
         };
+        terminalRef.current?.addEventListener("copy", handleCopy, true);
 
-        const flushWriteBuffer = () => {
-          if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
-          if (writeBuffer.length > 0) {
-            terminal.write(writeBuffer.join(""));
-            writeBuffer.length = 0;
-            bufferBytes = 0;
-          }
-          setHasNewOutput(false);
+        // Paste via native clipboard event — uses terminal.paste() for correct
+        // bracketed paste mode handling (same approach as Paseo).
+        const handlePaste = (e: ClipboardEvent) => {
+          if (readOnly) return;
+          const text = e.clipboardData?.getData("text/plain") ?? "";
+          if (!text) return;
+          e.preventDefault();
+          e.stopPropagation();
+          terminal.paste(text);
         };
+        terminalRef.current?.addEventListener("paste", handlePaste, true);
 
-        // Track scroll position — when user returns to bottom, flush buffer.
-        const scrollDisposable = terminal.onScroll(() => {
-          const atBottom = isAtBottom();
-          if (userScrolledUp && atBottom) {
-            userScrolledUp = false;
-            if (!selectionActive) flushWriteBuffer();
-          } else if (!userScrolledUp && !atBottom) {
-            userScrolledUp = true;
-          }
-        });
-
-        const selectionDisposable = terminal.onSelectionChange(() => {
-          if (terminal.hasSelection()) {
-            selectionActive = true;
-            if (!safetyTimer) {
-              safetyTimer = setTimeout(() => {
-                selectionActive = false;
-                if (!userScrolledUp) flushWriteBuffer();
-              }, 5_000);
-            }
-          } else {
-            selectionActive = false;
-            if (!userScrolledUp) flushWriteBuffer();
-          }
-        });
-
-        // Right-click: copy selection if present, otherwise paste from clipboard.
+        // Right-click: copy if selection, else paste.
         const handleContextMenu = (e: MouseEvent) => {
           e.preventDefault();
-          if (terminal.hasSelection()) {
-            navigator.clipboard?.writeText(terminal.getSelection()).catch(() => {});
-            terminal.clearSelection();
+          const selection = terminal.getSelection();
+          if (selection) {
+            navigator.clipboard?.writeText(selection).catch(() => {});
           } else if (!readOnly) {
             navigator.clipboard?.readText().then((text) => {
-              if (text) writeTerminal(sessionId, text);
+              if (text) terminal.paste(text);
             }).catch(() => {});
           }
         };
         terminalRef.current?.addEventListener("contextmenu", handleContextMenu);
 
-        // Intercept Cmd+C (Mac) and Ctrl+Shift+C (Linux/Win) for copy.
-        // Intercept Cmd+V (Mac) and Ctrl+Shift+V (Linux/Win) for explicit paste.
+        // Ctrl+C with selection → copy (suppress SIGINT). Cmd+C on Mac.
+        // Ctrl+Shift+C is NOT used — the browser intercepts it for DevTools
+        // before JavaScript can see it, so it cannot be overridden.
+        // Cmd+V / Ctrl+Shift+V → paste fallback.
         terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
           if (e.type !== "keydown") return true;
 
-          // Cmd+C / Ctrl+Shift+C — copy selection
+          // Ctrl+C / Cmd+C — copy selection; when no selection, pass through as normal SIGINT/interrupt.
           const isCopy =
-            (e.metaKey && !e.ctrlKey && !e.altKey && e.code === "KeyC") ||
-            (e.ctrlKey && e.shiftKey && e.code === "KeyC");
+            (e.ctrlKey && !e.shiftKey && !e.metaKey && e.code === "KeyC") ||
+            (e.metaKey && !e.ctrlKey && !e.altKey && e.code === "KeyC");
           if (isCopy && terminal.hasSelection()) {
             navigator.clipboard?.writeText(terminal.getSelection()).catch(() => {});
-            terminal.clearSelection();
-            return false;
+            return false; // suppress SIGINT when copying
           }
 
-          // Cmd+V / Ctrl+Shift+V — explicit paste from system clipboard
+          // Cmd+V / Ctrl+Shift+V — paste
           const isPaste =
             (e.metaKey && !e.ctrlKey && !e.altKey && e.code === "KeyV") ||
             (e.ctrlKey && e.shiftKey && e.code === "KeyV");
           if (isPaste && !readOnly) {
             navigator.clipboard?.readText().then((text) => {
-              if (text) writeTerminal(sessionId, text);
+              if (text) terminal.paste(text);
             }).catch(() => {});
-            return false;
-          }
-
-          // Scroll-to-bottom shortcuts
-          const isScrollBottom =
-            (e.metaKey && e.code === "ArrowDown") ||
-            (e.ctrlKey && e.code === "End");
-          if (isScrollBottom) {
-            userScrolledUp = false;
-            terminal.scrollToBottom();
-            flushWriteBuffer();
             return false;
           }
 
@@ -391,21 +346,9 @@ export function DirectTerminal({
         // Open terminal via mux
         openTerminal(sessionId);
 
-        // Subscribe to terminal data via mux
+        // Write data directly — no buffering.
         unsubscribe = subscribeTerminal(sessionId, (data) => {
-          if (selectionActive || userScrolledUp) {
-            writeBuffer.push(data);
-            bufferBytes += data.length;
-            if (userScrolledUp) setHasNewOutput(true);
-            // Safety flush at 1 MB to prevent OOM
-            if (bufferBytes > MAX_BUFFER_BYTES) {
-              selectionActive = false;
-              userScrolledUp = false;
-              flushWriteBuffer();
-            }
-          } else {
-            terminal.write(data);
-          }
+          terminal.write(data);
         });
 
         // Handle window resize
@@ -415,10 +358,8 @@ export function DirectTerminal({
             resizeTerminalMux(sessionId, terminal.cols, terminal.rows);
           }
         };
-
         window.addEventListener("resize", handleResize);
 
-        // Terminal input → mux
         if (!readOnly) {
           inputDisposable = terminal.onData((data) => {
             writeTerminal(sessionId, data);
@@ -428,11 +369,9 @@ export function DirectTerminal({
         // Send initial size
         resizeTerminalMux(sessionId, terminal.cols, terminal.rows);
 
-        // Store cleanup function to be called from useEffect cleanup
         cleanup = () => {
-          scrollDisposable.dispose();
-          selectionDisposable.dispose();
-          if (safetyTimer) clearTimeout(safetyTimer);
+          terminalRef.current?.removeEventListener("copy", handleCopy, true);
+          terminalRef.current?.removeEventListener("paste", handlePaste, true);
           terminalRef.current?.removeEventListener("contextmenu", handleContextMenu);
           window.removeEventListener("resize", handleResize);
           inputDisposable?.dispose();
@@ -756,33 +695,16 @@ export function DirectTerminal({
         </div>
       ) : null}
       {/* Terminal area */}
-      <div className="relative w-full" style={{ height: fullscreen ? `calc(100dvh - ${chromeless ? "0px" : "37px"})` : height }}>
-        <div
-          ref={terminalRef}
-          className="h-full w-full p-1.5"
-          style={{ overflow: "hidden", display: "flex", flexDirection: "column" }}
-        />
-        {/* New-output indicator — shown when user has scrolled up and new data arrived */}
-        {hasNewOutput ? (
-          <button
-            type="button"
-            onClick={() => {
-              const terminal = terminalInstance.current;
-              const fit = fitAddon.current;
-              if (terminal) terminal.scrollToBottom();
-              if (fit) fit.fit();
-              setHasNewOutput(false);
-            }}
-            className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)] shadow-lg backdrop-blur-sm transition-opacity hover:text-[var(--color-text-primary)]"
-            aria-label="Scroll to bottom"
-          >
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-              <path d="M12 5v14M5 12l7 7 7-7" />
-            </svg>
-            new output
-          </button>
-        ) : null}
-      </div>
+      <div
+        ref={terminalRef}
+        className={cn("w-full p-1.5")}
+        style={{
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          height: fullscreen ? `calc(100dvh - ${chromeless ? "0px" : "37px"})` : height,
+        }}
+      />
     </div>
   );
 }
