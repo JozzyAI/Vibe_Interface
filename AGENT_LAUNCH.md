@@ -146,9 +146,14 @@ PI_PUBLIC_URL=http://<your-LAN-ip>:3000
 
 Optional:
 ```env
-DIRECT_TERMINAL_PORT=14801   # default, override if port conflicts
-TERMINAL_WS_PATH=            # leave empty unless using a reverse proxy ws path
+PI_CLAUDE_DEFAULT_MODEL=claude-sonnet-4-6   # model passed as --model when UI is set to Default
+DIRECT_TERMINAL_PORT=14801                  # default, override if port conflicts
+TERMINAL_WS_PATH=                           # leave empty unless using a reverse proxy ws path
 ```
+
+> **Important:** Shell aliases (e.g. `alias claude="claude --model ..."`) do NOT apply to
+> pi-agent launches. pi-agent spawns Claude via subprocess and aliases are never expanded.
+> Always set `PI_CLAUDE_DEFAULT_MODEL` instead of relying on aliases.
 
 ---
 

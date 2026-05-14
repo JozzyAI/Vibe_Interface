@@ -423,11 +423,9 @@ const CODEX_MODEL_OPTIONS = [
 ];
 
 const CLAUDE_MODEL_OPTIONS = [
-  { value: "", label: "Default — use Claude Code's configured model" },
-  { value: "sonnet", label: "sonnet" },
-  { value: "opus", label: "opus" },
-  { value: "claude-sonnet-4-6", label: "claude-sonnet-4-6" },
-  { value: "claude-opus-4-7", label: "claude-opus-4-7" },
+  { value: "", label: "Default (uses PI_CLAUDE_DEFAULT_MODEL if set)" },
+  { value: "claude-sonnet-4-6", label: "Sonnet 4.6" },
+  { value: "claude-opus-4-7", label: "Opus 4.7" },
   { value: "__custom", label: "Custom..." },
 ];
 

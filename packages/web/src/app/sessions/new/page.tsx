@@ -61,7 +61,11 @@ export default async function AddSessionPage() {
       }
       sidebarFooter={`${sessionCount} session${sessionCount === 1 ? "" : "s"} shown`}
     >
-      <PISessionCreator initialRemoteOverview={remoteOverview} workspaceRoot={workspaceRoot} />
+      <PISessionCreator
+        initialRemoteOverview={remoteOverview}
+        workspaceRoot={workspaceRoot}
+        claudeDefaultModel={process.env["PI_CLAUDE_DEFAULT_MODEL"]?.trim() || undefined}
+      />
     </PIWorkspaceShell>
   );
 }

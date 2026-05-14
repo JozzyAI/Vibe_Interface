@@ -45,11 +45,14 @@ function buildProviderCommand(input: {
             : []),
         ]
       : [];
-  // Claude Code uses --model <value>; omit entirely when empty/default.
-  const claudeOptions =
-    input.provider === "claude" && input.model?.trim()
-      ? ["--model", input.model.trim()]
-      : [];
+  // Claude Code uses --model <value>.
+  // Precedence: explicit model from UI > PI_CLAUDE_DEFAULT_MODEL env var > omit flag.
+  // Never rely on shell aliases — pi-agent launches via subprocess, aliases are not expanded.
+  const claudeModel =
+    input.provider === "claude"
+      ? (input.model?.trim() || process.env["PI_CLAUDE_DEFAULT_MODEL"]?.trim() || "")
+      : "";
+  const claudeOptions = claudeModel ? ["--model", claudeModel] : [];
   const extraOptions = [...codexOptions, ...claudeOptions];
   if (providerArgs.length > 0) {
     command.push("--", ...extraOptions, ...providerArgs);

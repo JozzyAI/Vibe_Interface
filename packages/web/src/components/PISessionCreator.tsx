@@ -11,6 +11,7 @@ import type {
 interface Props {
   initialRemoteOverview: RemoteApprovalOverview;
   workspaceRoot: string;
+  claudeDefaultModel?: string;
 }
 
 async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -70,14 +71,17 @@ const CODEX_MODEL_OPTIONS = [
   { value: "gpt-5-mini", label: "gpt-5-mini" },
 ];
 
-const CLAUDE_MODEL_OPTIONS = [
-  { value: "", label: "Default — use Claude Code's configured model" },
-  { value: "sonnet", label: "sonnet" },
-  { value: "opus", label: "opus" },
-  { value: "claude-sonnet-4-6", label: "claude-sonnet-4-6" },
-  { value: "claude-opus-4-7", label: "claude-opus-4-7" },
-  { value: "__custom", label: "Custom..." },
-];
+function buildClaudeModelOptions(configuredDefault?: string) {
+  const defaultLabel = configuredDefault
+    ? `Default (configured: ${configuredDefault})`
+    : "Default — omit --model flag";
+  return [
+    { value: "", label: defaultLabel },
+    { value: "claude-sonnet-4-6", label: "Sonnet 4.6" },
+    { value: "claude-opus-4-7", label: "Opus 4.7" },
+    { value: "__custom", label: "Custom..." },
+  ];
+}
 
 const REASONING_OPTIONS = [
   { value: "", label: "Default thinking" },
@@ -90,7 +94,7 @@ const REASONING_OPTIONS = [
 interface BrowseEntry { name: string; isDir: boolean; }
 interface BrowseResult { path: string; agentRoot: string; entries: BrowseEntry[]; }
 
-export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props) {
+export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeDefaultModel }: Props) {
   const [overview, setOverview] = useState(initialRemoteOverview);
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [title, setTitle] = useState("");
@@ -101,7 +105,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot }: Props
   const [model, setModel] = useState("");
   const [customModel, setCustomModel] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState("");
-  const modelOptions = provider === "claude" ? CLAUDE_MODEL_OPTIONS : CODEX_MODEL_OPTIONS;
+  const modelOptions = provider === "claude" ? buildClaudeModelOptions(claudeDefaultModel) : CODEX_MODEL_OPTIONS;
   const [ralphEnabled, setRalphEnabled] = useState(false);
   const [autoResumeUsageLimit, setAutoResumeUsageLimit] = useState(false);
   const [autoRestartCodex, setAutoRestartCodex] = useState(false);
