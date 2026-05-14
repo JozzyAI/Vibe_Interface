@@ -473,10 +473,19 @@ a:hover {
   background: var(--color-scrollbar-active);
 }
 
-/* ── xterm.js terminal viewport scrollbar — macOS-style auto-hide ──── */
+/* ── xterm.js terminal ─────────────────────────────────────────────── */
+
+/* Reset letter-spacing so FitAddon measures cell widths correctly.
+ * Without this, the body letter-spacing (-0.011em) is inherited and
+ * FitAddon computes a slightly narrower cell width than what glyphs
+ * actually render at, causing right-side character clipping at high
+ * column counts. */
+.xterm {
+  letter-spacing: 0;
+}
 
 .xterm .xterm-viewport {
-  overflow-y: overlay !important;
+  overflow-y: scroll;
 }
 
 .xterm .xterm-viewport::-webkit-scrollbar {

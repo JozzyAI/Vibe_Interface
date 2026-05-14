@@ -136,6 +136,7 @@ export function DirectTerminal({
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [reloadError, setReloadError] = useState<string | null>(null);
+  const [hasNewOutput, setHasNewOutput] = useState(false);
 
   // Update URL when fullscreen changes
   useEffect(() => {
@@ -218,14 +219,15 @@ export function DirectTerminal({
           fontFamily:
             'var(--font-jetbrains-mono), "JetBrains Mono", "SF Mono", Menlo, Monaco, "Courier New", monospace',
           theme: activeTheme,
-          // Light mode needs an explicit contrast floor because agent UIs often emit
-          // dim/faint ANSI sequences that become unreadable on a near-white background.
           minimumContrastRatio: isDark ? 1 : 7,
           scrollback: 10000,
           allowProposedApi: true,
-          fastScrollModifier: "alt",
-          fastScrollSensitivity: 3,
-          scrollSensitivity: 1,
+          fastScrollModifier: "shift",
+          fastScrollSensitivity: 8,
+          scrollSensitivity: 3,
+          macOptionIsMeta: true,
+          rightClickSelectsWord: false,
+          convertEol: false,
         });
 
         // Add FitAddon for responsive sizing
@@ -278,48 +280,76 @@ export function DirectTerminal({
         // Fit terminal to container
         fit.fit();
 
-        // ── Preserve selection while terminal receives output ────────
-        // xterm.js clears the selection on every terminal.write(). We
-        // buffer incoming data while a selection is active so the
-        // highlight stays visible for Cmd+C. The buffer is flushed
-        // when the selection is cleared (click, keypress, etc.).
+        // ── Write buffering: preserve scroll position and selection ──
+        // xterm.js write() always forces the viewport to the bottom.
+        // We buffer incoming data when:
+        //   (a) the user has an active text selection (to keep highlight visible), or
+        //   (b) the user has manually scrolled up (to preserve their scroll position).
+        // In case (b) we also show a "new output" indicator button.
         const writeBuffer: string[] = [];
         let selectionActive = false;
+        let userScrolledUp = false;
         let safetyTimer: ReturnType<typeof setTimeout> | null = null;
         let bufferBytes = 0;
         const MAX_BUFFER_BYTES = 1_048_576; // 1 MB
 
+        const isAtBottom = () => {
+          const buf = terminal.buffer.active;
+          return buf.viewportY >= buf.length - terminal.rows;
+        };
+
         const flushWriteBuffer = () => {
-          if (safetyTimer) {
-            clearTimeout(safetyTimer);
-            safetyTimer = null;
-          }
+          if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
           if (writeBuffer.length > 0) {
             terminal.write(writeBuffer.join(""));
             writeBuffer.length = 0;
             bufferBytes = 0;
           }
+          setHasNewOutput(false);
         };
+
+        // Track scroll position — when user returns to bottom, flush buffer.
+        const scrollDisposable = terminal.onScroll(() => {
+          const atBottom = isAtBottom();
+          if (userScrolledUp && atBottom) {
+            userScrolledUp = false;
+            if (!selectionActive) flushWriteBuffer();
+          } else if (!userScrolledUp && !atBottom) {
+            userScrolledUp = true;
+          }
+        });
 
         const selectionDisposable = terminal.onSelectionChange(() => {
           if (terminal.hasSelection()) {
             selectionActive = true;
-            // Safety: flush after 5s to prevent unbounded buffering
             if (!safetyTimer) {
               safetyTimer = setTimeout(() => {
                 selectionActive = false;
-                flushWriteBuffer();
+                if (!userScrolledUp) flushWriteBuffer();
               }, 5_000);
             }
           } else {
             selectionActive = false;
-            flushWriteBuffer();
+            if (!userScrolledUp) flushWriteBuffer();
           }
         });
 
+        // Right-click: copy selection if present, otherwise paste from clipboard.
+        const handleContextMenu = (e: MouseEvent) => {
+          e.preventDefault();
+          if (terminal.hasSelection()) {
+            navigator.clipboard?.writeText(terminal.getSelection()).catch(() => {});
+            terminal.clearSelection();
+          } else if (!readOnly) {
+            navigator.clipboard?.readText().then((text) => {
+              if (text) writeTerminal(sessionId, text);
+            }).catch(() => {});
+          }
+        };
+        terminalRef.current?.addEventListener("contextmenu", handleContextMenu);
+
         // Intercept Cmd+C (Mac) and Ctrl+Shift+C (Linux/Win) for copy.
-        // Paste (Cmd+V / Ctrl+Shift+V) is handled natively by xterm.js
-        // via its internal textarea — no custom handler needed.
+        // Intercept Cmd+V (Mac) and Ctrl+Shift+V (Linux/Win) for explicit paste.
         terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
           if (e.type !== "keydown") return true;
 
@@ -329,8 +359,29 @@ export function DirectTerminal({
             (e.ctrlKey && e.shiftKey && e.code === "KeyC");
           if (isCopy && terminal.hasSelection()) {
             navigator.clipboard?.writeText(terminal.getSelection()).catch(() => {});
-            // Clear selection so the terminal resumes receiving output
             terminal.clearSelection();
+            return false;
+          }
+
+          // Cmd+V / Ctrl+Shift+V — explicit paste from system clipboard
+          const isPaste =
+            (e.metaKey && !e.ctrlKey && !e.altKey && e.code === "KeyV") ||
+            (e.ctrlKey && e.shiftKey && e.code === "KeyV");
+          if (isPaste && !readOnly) {
+            navigator.clipboard?.readText().then((text) => {
+              if (text) writeTerminal(sessionId, text);
+            }).catch(() => {});
+            return false;
+          }
+
+          // Scroll-to-bottom shortcuts
+          const isScrollBottom =
+            (e.metaKey && e.code === "ArrowDown") ||
+            (e.ctrlKey && e.code === "End");
+          if (isScrollBottom) {
+            userScrolledUp = false;
+            terminal.scrollToBottom();
+            flushWriteBuffer();
             return false;
           }
 
@@ -342,12 +393,14 @@ export function DirectTerminal({
 
         // Subscribe to terminal data via mux
         unsubscribe = subscribeTerminal(sessionId, (data) => {
-          if (selectionActive) {
+          if (selectionActive || userScrolledUp) {
             writeBuffer.push(data);
             bufferBytes += data.length;
-            // Flush if buffer exceeds 1 MB to prevent OOM
+            if (userScrolledUp) setHasNewOutput(true);
+            // Safety flush at 1 MB to prevent OOM
             if (bufferBytes > MAX_BUFFER_BYTES) {
               selectionActive = false;
+              userScrolledUp = false;
               flushWriteBuffer();
             }
           } else {
@@ -377,8 +430,10 @@ export function DirectTerminal({
 
         // Store cleanup function to be called from useEffect cleanup
         cleanup = () => {
+          scrollDisposable.dispose();
           selectionDisposable.dispose();
           if (safetyTimer) clearTimeout(safetyTimer);
+          terminalRef.current?.removeEventListener("contextmenu", handleContextMenu);
           window.removeEventListener("resize", handleResize);
           inputDisposable?.dispose();
           inputDisposable = null;
@@ -701,16 +756,33 @@ export function DirectTerminal({
         </div>
       ) : null}
       {/* Terminal area */}
-      <div
-        ref={terminalRef}
-        className={cn("w-full p-1.5")}
-        style={{
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-          height: fullscreen ? `calc(100dvh - ${chromeless ? "0px" : "37px"})` : height,
-        }}
-      />
+      <div className="relative w-full" style={{ height: fullscreen ? `calc(100dvh - ${chromeless ? "0px" : "37px"})` : height }}>
+        <div
+          ref={terminalRef}
+          className="h-full w-full p-1.5"
+          style={{ overflow: "hidden", display: "flex", flexDirection: "column" }}
+        />
+        {/* New-output indicator — shown when user has scrolled up and new data arrived */}
+        {hasNewOutput ? (
+          <button
+            type="button"
+            onClick={() => {
+              const terminal = terminalInstance.current;
+              const fit = fitAddon.current;
+              if (terminal) terminal.scrollToBottom();
+              if (fit) fit.fit();
+              setHasNewOutput(false);
+            }}
+            className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)] shadow-lg backdrop-blur-sm transition-opacity hover:text-[var(--color-text-primary)]"
+            aria-label="Scroll to bottom"
+          >
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <path d="M12 5v14M5 12l7 7 7-7" />
+            </svg>
+            new output
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
