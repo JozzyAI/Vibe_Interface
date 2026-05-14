@@ -8,11 +8,36 @@ import type { WebSocketServer } from "ws";
 import { findTmux } from "./tmux-utils.js";
 import { createMuxWebSocket } from "./mux-websocket.js";
 import { RemoteTerminalRelay } from "./remote-terminal-relay.js";
+import { RelayTerminalSubscriber } from "./relay-terminal-subscriber.js";
+
+export type TerminalRelay = RemoteTerminalRelay | RelayTerminalSubscriber;
 
 export interface DirectTerminalServer {
   server: Server;
-  relay: RemoteTerminalRelay;
+  relay: TerminalRelay;
   shutdown: () => void;
+}
+
+function buildTerminalRelay(): TerminalRelay {
+  const relayBase = (
+    process.env.PI_RELAY_BASE_URL ?? process.env.PI_RELAY_URL ?? ""
+  ).trim().replace(/\/$/, "");
+  const relayToken = (process.env.PI_RELAY_PI_TOKEN ?? "").trim();
+
+  if (relayBase && relayToken) {
+    const wsBase = relayBase.startsWith("http://")
+      ? "ws://" + relayBase.slice("http://".length)
+      : relayBase.startsWith("https://")
+        ? "wss://" + relayBase.slice("https://".length)
+        : relayBase;
+    const url = `${wsBase}/pi-agent-relay`;
+    console.log(`[DirectTerminal] Using relay terminal subscriber: ${url}`);
+    const sub = new RelayTerminalSubscriber(url, relayToken);
+    sub.start();
+    return sub;
+  }
+
+  return new RemoteTerminalRelay();
 }
 
 /**
@@ -27,7 +52,7 @@ export function createDirectTerminalServer(tmuxPath?: string): DirectTerminalSer
   const TMUX = tmuxPath ?? findTmux();
 
   // Relay must be created before the mux so the mux can use it for remote fallback
-  const relay = new RemoteTerminalRelay();
+  const relay = buildTerminalRelay();
 
   let muxWss: WebSocketServer | null = null;
 
@@ -80,7 +105,7 @@ export function createDirectTerminalServer(tmuxPath?: string): DirectTerminalSer
       muxWss.handleUpgrade(request, socket, head, (ws) => {
         muxWss!.emit("connection", ws, request);
       });
-    } else if (pathname === "/pi-agent-relay") {
+    } else if (pathname === "/pi-agent-relay" && relay instanceof RemoteTerminalRelay) {
       relay.handleUpgrade(request, socket as never, head);
     } else {
       socket.destroy();

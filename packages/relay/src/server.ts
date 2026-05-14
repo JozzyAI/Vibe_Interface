@@ -276,16 +276,142 @@ export function createRelayServer(): RelayServer {
 
   const wss = new WebSocketServer({ noServer: true });
 
+  // ── Terminal relay proxy (/pi-agent-relay) ────────────────────────────────
+  // Proxies terminal WebSocket traffic between pi-agents and the PI dashboard.
+  // Agents authenticate with a daemon token; the dashboard authenticates with
+  // a pi token.  The relay tags agent→dashboard frames with agentId and strips
+  // it from dashboard→agent frames before forwarding.
+  const terminalWss = new WebSocketServer({ noServer: true });
+
+  // agentId → agent WebSocket
+  const terminalAgents = new Map<string, WebSocket>();
+  // Single dashboard subscriber WebSocket (one PI dashboard at a time)
+  let terminalDashboard: WebSocket | null = null;
+
+  function sendToAgent(agentId: string, msg: object): void {
+    const agentWs = terminalAgents.get(agentId);
+    if (agentWs?.readyState === 1 /* OPEN */) {
+      agentWs.send(JSON.stringify(msg));
+    }
+  }
+
+  function sendToDashboard(msg: object): void {
+    if (terminalDashboard?.readyState === 1 /* OPEN */) {
+      terminalDashboard.send(JSON.stringify(msg));
+    }
+  }
+
+  terminalWss.on("connection", (socket: WebSocket) => {
+    let agentId: string | null = null;
+    let isDashboard = false;
+    let authed = false;
+
+    socket.on("message", (raw: Buffer) => {
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+      } catch {
+        return;
+      }
+
+      if (!authed) {
+        if (msg["type"] !== "hello") {
+          socket.close(4001, "Send hello first");
+          return;
+        }
+
+        const token = typeof msg["token"] === "string" ? msg["token"] : "";
+        const kind = typeof msg["kind"] === "string" ? msg["kind"] : "daemon";
+
+        const authorized = authorizeRelayToken(tokens, token, kind === "pi" ? "pi" : "daemon");
+        if (!authorized) {
+          socket.send(JSON.stringify({ type: "hello_error", message: "Invalid relay token" }));
+          socket.close(4003, "Unauthorized");
+          return;
+        }
+
+        if (kind === "pi") {
+          // Dashboard subscriber
+          isDashboard = true;
+          if (terminalDashboard && terminalDashboard !== socket) {
+            terminalDashboard.close(4002, "Replaced by newer dashboard connection");
+          }
+          terminalDashboard = socket;
+          authed = true;
+          socket.send(JSON.stringify({ type: "hello_ack" }));
+          // Notify about currently connected agents
+          for (const connectedAgentId of terminalAgents.keys()) {
+            socket.send(JSON.stringify({ type: "agent_connected", agentId: connectedAgentId }));
+          }
+          console.log("[TerminalRelay] Dashboard subscriber connected");
+        } else {
+          // pi-agent terminal connection
+          const rawAgentId = typeof msg["agentId"] === "string" ? msg["agentId"] : "";
+          if (!rawAgentId) {
+            socket.send(JSON.stringify({ type: "hello_error", message: "Missing agentId" }));
+            socket.close(4001, "Missing agentId");
+            return;
+          }
+          agentId = rawAgentId;
+          const existing = terminalAgents.get(agentId);
+          if (existing && existing !== socket) {
+            existing.close(4002, "Replaced by newer agent connection");
+          }
+          terminalAgents.set(agentId, socket);
+          authed = true;
+          socket.send(JSON.stringify({ type: "hello_ack", agentId }));
+          sendToDashboard({ type: "agent_connected", agentId });
+          console.log(`[TerminalRelay] Agent connected: ${agentId}`);
+        }
+        return;
+      }
+
+      if (isDashboard) {
+        // Dashboard → agent: strip off agentId and route to matching agent
+        const targetId = typeof msg["agentId"] === "string" ? msg["agentId"] : null;
+        if (!targetId) return;
+        const { agentId: _drop, ...payload } = msg as { agentId: string } & Record<string, unknown>;
+        sendToAgent(targetId, payload);
+      } else if (agentId) {
+        // Agent → dashboard: tag with agentId
+        if (msg["type"] === "ping") {
+          socket.send(JSON.stringify({ type: "pong" }));
+          return;
+        }
+        sendToDashboard({ ...msg, agentId });
+      }
+    });
+
+    socket.on("close", () => {
+      if (isDashboard) {
+        if (terminalDashboard === socket) terminalDashboard = null;
+        console.log("[TerminalRelay] Dashboard subscriber disconnected");
+      } else if (agentId) {
+        terminalAgents.delete(agentId);
+        sendToDashboard({ type: "agent_disconnected", agentId });
+        console.log(`[TerminalRelay] Agent disconnected: ${agentId}`);
+      }
+    });
+
+    socket.on("error", () => {
+      if (isDashboard && terminalDashboard === socket) terminalDashboard = null;
+      else if (agentId) terminalAgents.delete(agentId);
+    });
+  });
+
   httpServer.on("upgrade", (request, socket, head) => {
     const pathname = new URL(request.url ?? "/", "ws://localhost").pathname;
-    if (pathname !== "/ws") {
+    if (pathname === "/ws") {
+      wss.handleUpgrade(request, socket, head, (ws: WebSocket) => {
+        wss.emit("connection", ws, request);
+      });
+    } else if (pathname === "/pi-agent-relay") {
+      terminalWss.handleUpgrade(request, socket, head, (ws: WebSocket) => {
+        terminalWss.emit("connection", ws, request);
+      });
+    } else {
       socket.destroy();
-      return;
     }
-
-    wss.handleUpgrade(request, socket, head, (ws: WebSocket) => {
-      wss.emit("connection", ws, request);
-    });
   });
 
   wss.on("connection", (socket: WebSocket) => {
@@ -400,6 +526,9 @@ export function createRelayServer(): RelayServer {
     httpServer,
     shutdown: async () => {
       for (const client of wss.clients) {
+        client.close(1001, "Relay shutting down");
+      }
+      for (const client of terminalWss.clients) {
         client.close(1001, "Relay shutting down");
       }
 

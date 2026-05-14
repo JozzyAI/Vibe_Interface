@@ -1,0 +1,31 @@
+app = "pi-relay"
+primary_region = "sin"   # Singapore — change to nearest region
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PI_RELAY_PORT = "8787"
+  PI_RELAY_HOST = "0.0.0.0"
+
+[[services]]
+  internal_port = 8787
+  protocol = "tcp"
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+
+  [services.http_checks]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+    path = "/health"
+
+[metrics]
+  port = 9091
+  path = "/metrics"
