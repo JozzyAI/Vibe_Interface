@@ -136,6 +136,8 @@ export function DirectTerminal({
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [reloadError, setReloadError] = useState<string | null>(null);
+  const [showHint, setShowHint] = useState(true);
+  const hideHintRef = useRef<(() => void) | null>(null);
 
   // Update URL when fullscreen changes
   useEffect(() => {
@@ -346,9 +348,17 @@ export function DirectTerminal({
         // Open terminal via mux
         openTerminal(sessionId);
 
+        // Register the hint-hide callback so the hint disappears on first output.
+        hideHintRef.current = () => setShowHint(false);
+
         // Write data directly — no buffering.
         unsubscribe = subscribeTerminal(sessionId, (data) => {
           terminal.write(data);
+          // Hide hint on first byte of real output.
+          if (hideHintRef.current) {
+            hideHintRef.current();
+            hideHintRef.current = null;
+          }
         });
 
         // Handle window resize
@@ -695,16 +705,25 @@ export function DirectTerminal({
         </div>
       ) : null}
       {/* Terminal area */}
-      <div
-        ref={terminalRef}
-        className={cn("w-full p-1.5")}
-        style={{
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-          height: fullscreen ? `calc(100dvh - ${chromeless ? "0px" : "37px"})` : height,
-        }}
-      />
+      <div className="relative w-full" style={{ height: fullscreen ? `calc(100dvh - ${chromeless ? "0px" : "37px"})` : height }}>
+        <div
+          ref={terminalRef}
+          className={cn("h-full w-full p-1.5")}
+          style={{ overflow: "hidden", display: "flex", flexDirection: "column" }}
+        />
+        {showHint ? (
+          <div
+            className="pointer-events-none absolute bottom-8 left-0 right-0 flex justify-center"
+            aria-hidden
+          >
+            <div className="rounded px-3 py-2 text-center font-mono text-[10px] leading-[1.7] text-[rgba(255,255,255,0.18)]">
+              <span className="block opacity-70">Copy / paste</span>
+              <span className="block">Ctrl+C with selection → copies &nbsp;·&nbsp; Ctrl+C without → interrupt</span>
+              <span className="block">Right-click → copy / paste &nbsp;·&nbsp; Cmd+V / Ctrl+Shift+V → paste</span>
+            </div>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

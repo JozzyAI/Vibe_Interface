@@ -278,7 +278,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
 
   if (connectedMachines.length === 0) {
     return (
-      <section className="rounded-3xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6">
+      <section className="rounded-3xl border border-[var(--color-border-default)] bg-white p-6">
         <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
           Add session
         </p>
@@ -300,7 +300,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
 
   return (
     <div className="grid gap-5">
-      <section className="rounded-3xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6">
+      <section className="rounded-3xl border border-[#e8e8e5] bg-white p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
@@ -326,7 +326,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
             <select
               value={selectedAgentId}
               onChange={(event) => setSelectedAgentId(event.currentTarget.value)}
-              className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
+              className="rounded-2xl border border-[var(--color-border-default)] bg-[#f7f7f6] px-4 py-3 text-[13px] text-[#1e2026]"
             >
               {connectedMachines.map((agent: RemoteAgentSummary) => (
                 <option key={agent.agentId} value={agent.agentId}>
@@ -348,7 +348,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
                 // timeout_allow is not supported for Claude — reset to manual when switching
                 if (next === "claude" && permissionMode === "timeout_allow") setPermissionMode("manual");
               }}
-              className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
+              className="rounded-2xl border border-[var(--color-border-default)] bg-[#f7f7f6] px-4 py-3 text-[13px] text-[#1e2026]"
             >
               <option value="claude">Claude Code</option>
               <option value="codex">Codex CLI</option>
@@ -362,7 +362,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
             <select
               value={permissionMode}
               onChange={(event) => setPermissionMode(event.currentTarget.value as PIApprovalPermissionMode)}
-              className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
+              className="rounded-2xl border border-[var(--color-border-default)] bg-[#f7f7f6] px-4 py-3 text-[13px] text-[#1e2026]"
             >
               {provider === "claude" ? (
                 <>
@@ -386,7 +386,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
             <select
               value={model}
               onChange={(event) => setModel(event.currentTarget.value)}
-              className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
+              className="rounded-2xl border border-[var(--color-border-default)] bg-[#f7f7f6] px-4 py-3 text-[13px] text-[#1e2026]"
             >
               {modelOptions.map((option) => (
                 <option key={option.value || "default"} value={option.value}>
@@ -399,7 +399,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
                 value={customModel}
                 onChange={(event) => setCustomModel(event.currentTarget.value)}
                 placeholder={provider === "claude" ? "e.g. claude-opus-4-7" : "e.g. gpt-5.5"}
-                className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
+                className="rounded-2xl border border-[var(--color-border-default)] bg-[#f7f7f6] px-4 py-3 text-[13px] text-[#1e2026]"
               />
             ) : null}
           </div>
@@ -411,7 +411,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
             <select
               value={reasoningEffort}
               onChange={(event) => setReasoningEffort(event.currentTarget.value)}
-              className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
+              className="rounded-2xl border border-[var(--color-border-default)] bg-[#f7f7f6] px-4 py-3 text-[13px] text-[#1e2026]"
             >
               {REASONING_OPTIONS.map((option) => (
                 <option key={option.value || "default"} value={option.value}>
@@ -429,25 +429,44 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
               value={title}
               onChange={(event) => setTitle(event.currentTarget.value)}
               placeholder="Optional. First prompt line is used if empty."
-              className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
+              className="rounded-2xl border border-[var(--color-border-default)] bg-[#f7f7f6] px-4 py-3 text-[13px] text-[#1e2026]"
             />
           </div>
 
-          <div className="grid gap-1">
-            <label className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
-              Workspace folder
-            </label>
+          <div className="grid gap-1 md:col-span-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+                Workspace folder
+              </label>
+              {/* Auto resume — inline toggle on the right of workspace row */}
+              <button
+                type="button"
+                onClick={() => setAutoResumeUsageLimit((current) => !current)}
+                className={[
+                  "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold transition",
+                  autoResumeUsageLimit
+                    ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)] text-[var(--color-accent)]"
+                    : "border-[var(--color-border-default)] bg-[#f7f7f6] text-[var(--color-text-secondary)]",
+                ].join(" ")}
+              >
+                <span className={[
+                  "inline-block h-1.5 w-1.5 rounded-full",
+                  autoResumeUsageLimit ? "bg-[var(--color-accent)]" : "bg-[var(--color-text-tertiary)]",
+                ].join(" ")} />
+                {autoResumeUsageLimit ? "Auto resume on" : "Auto resume"}
+              </button>
+            </div>
             <div className="flex gap-2">
               <input
                 value={workspace}
                 onChange={(event) => setWorkspace(event.currentTarget.value)}
-                className="min-w-0 flex-1 rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-3 text-[13px] text-[var(--color-text-primary)]"
+                className="min-w-0 flex-1 rounded-2xl border border-[var(--color-border-default)] bg-[#f7f7f6] px-4 py-3 text-[13px] text-[#1e2026]"
               />
               {selectedAgent && agentDefaultRoot ? (
                 <button
                   type="button"
                   onClick={() => { setBrowseOpen((v) => !v); if (!browseOpen) openBrowser(); }}
-                  className="shrink-0 rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-3 py-3 text-[12px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-surface)]"
+                  className="shrink-0 rounded-2xl border border-[var(--color-border-default)] bg-[#f7f7f6] px-3 py-3 text-[12px] font-semibold text-[var(--color-text-secondary)] hover:bg-white"
                   title="Browse folders"
                 >
                   Browse
@@ -456,7 +475,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
             </div>
 
             {browseOpen && selectedAgent ? (
-              <div className="mt-2 overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)]">
+              <div className="mt-2 overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[#f7f7f6]">
                 {/* Breadcrumb */}
                 <div className="flex items-center gap-1 border-b border-[var(--color-border-subtle)] px-3 py-2 text-[11px]">
                   <span className="text-[var(--color-text-tertiary)]">Root:</span>
@@ -479,7 +498,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
                     <button
                       type="button"
                       onClick={() => { setShowNewFolder((v) => !v); setNewFolderName(""); }}
-                      className="rounded-full border border-[var(--color-border-default)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-surface)]"
+                      className="rounded-full border border-[var(--color-border-default)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-white"
                     >
                       + New folder
                     </button>
@@ -502,7 +521,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
                       onKeyDown={(e) => { if (e.key === "Enter") void createFolder(); }}
                       placeholder="New folder name"
                       autoFocus
-                      className="min-w-0 flex-1 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-1.5 text-[12px] text-[var(--color-text-primary)] outline-none"
+                      className="min-w-0 flex-1 rounded-xl border border-[var(--color-border-default)] bg-white px-3 py-1.5 text-[12px] text-[var(--color-text-primary)] outline-none"
                     />
                     <button
                       type="button"
@@ -527,7 +546,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
                       const parent = browsePath.split("/").slice(0, -1).join("/") || browseRoot;
                       void loadBrowse(selectedAgent.agentId, parent);
                     }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-surface)]"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-[var(--color-text-secondary)] hover:bg-white"
                   >
                     <span className="text-[var(--color-text-tertiary)]">↑</span> ..
                   </button>
@@ -541,7 +560,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
                   {browseEntries.map((entry) => {
                     const entryPath = `${browsePath}/${entry.name}`;
                     return (
-                      <div key={entry.name} className="flex items-center gap-1 hover:bg-[var(--color-bg-surface)]">
+                      <div key={entry.name} className="flex items-center gap-1 hover:bg-white">
                         <button
                           type="button"
                           onClick={() => void loadBrowse(selectedAgent.agentId, entryPath)}
@@ -585,11 +604,13 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
             value={prompt}
             onChange={(event) => setPrompt(event.currentTarget.value)}
             placeholder="Tell the agent exactly what to build, fix, inspect, or continue."
-            className="min-h-[220px] resize-y rounded-3xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] px-4 py-4 text-[14px] leading-7 text-[var(--color-text-primary)] outline-none"
+            className="min-h-[220px] resize-y rounded-3xl border border-[#e8e8e5] bg-[#f7f7f6] px-4 py-4 text-[14px] leading-7 text-[#1e2026] outline-none"
           />
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        {/* Ralph mode — hidden for now, code intact */}
+        {/* TODO: re-enable when Ralph mode is ready for users
+        <div className="mt-4">
           <button
             type="button"
             onClick={() => setRalphEnabled((current) => !current)}
@@ -597,12 +618,10 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
               "rounded-3xl border px-4 py-4 text-left transition",
               ralphEnabled
                 ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)]"
-                : "border-[var(--color-border-default)] bg-[var(--color-bg-base)]",
+                : "border-[var(--color-border-default)] bg-[#f7f7f6]",
             ].join(" ")}
           >
-            <span className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
-              True Ralph mode
-            </span>
+            <span className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">True Ralph mode</span>
             <span className="mt-1 block text-[15px] font-semibold text-[var(--color-text-primary)]">
               {ralphEnabled ? "Ralph iterations enabled" : "Enable Ralph iterations"}
             </span>
@@ -610,29 +629,12 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
               Runs one bounded pass, exits, then PI starts the next pass if the task is not complete.
             </span>
           </button>
+        </div>
+        */}
 
-          <button
-            type="button"
-            onClick={() => setAutoResumeUsageLimit((current) => !current)}
-            className={[
-              "rounded-3xl border px-4 py-4 text-left transition",
-              autoResumeUsageLimit
-                ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)]"
-                : "border-[var(--color-border-default)] bg-[var(--color-bg-base)]",
-            ].join(" ")}
-          >
-            <span className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
-              Usage limit
-            </span>
-            <span className="mt-1 block text-[15px] font-semibold text-[var(--color-text-primary)]">
-              {autoResumeUsageLimit ? "Auto resume enabled" : "Auto resume after usage limit"}
-            </span>
-            <span className="mt-1 block text-[12px] leading-5 text-[var(--color-text-secondary)]">
-              If the agent hits a usage limit, PI queues a follow-up session for the retry time.
-            </span>
-          </button>
-
-          {provider === "codex" ? (
+        {/* Codex auto-restart — only shown for Codex sessions */}
+        {provider === "codex" ? (
+          <div className="mt-4">
             <button
               type="button"
               onClick={() => setAutoRestartCodex((current) => !current)}
@@ -640,7 +642,7 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
                 "rounded-3xl border px-4 py-4 text-left transition",
                 autoRestartCodex
                   ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)]"
-                  : "border-[var(--color-border-default)] bg-[var(--color-bg-base)]",
+                  : "border-[var(--color-border-default)] bg-[#f7f7f6]",
               ].join(" ")}
             >
               <span className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
@@ -653,13 +655,10 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
                 If Codex says restart is required, PI launches a fresh process and resumes this session.
               </span>
             </button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-[12px] text-[var(--color-text-tertiary)]">
-            New session will open in the Sessions live view after it is queued.
-          </p>
+        <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
           <button
             type="button"
             disabled={isPending || !prompt.trim() || !selectedAgent}
@@ -674,22 +673,6 @@ export function PISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
         {error ? <p className="mt-4 text-[13px] font-medium text-[var(--color-accent-red)]">{error}</p> : null}
       </section>
 
-      <section className="rounded-3xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-5">
-        <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
-          Good next additions
-        </p>
-        <div className="mt-3 grid gap-3 text-[13px] leading-6 text-[var(--color-text-secondary)] md:grid-cols-3">
-          <div className="rounded-2xl bg-[var(--color-bg-base)] p-4">
-            Prompt templates for common jobs like bug fix, refactor, review, and test writing.
-          </div>
-          <div className="rounded-2xl bg-[var(--color-bg-base)] p-4">
-            Attach files or folders as context before starting the session.
-          </div>
-          <div className="rounded-2xl bg-[var(--color-bg-base)] p-4">
-            Queue sessions for offline machines and start them automatically when the machine reconnects.
-          </div>
-        </div>
-      </section>
     </div>
   );
 }
