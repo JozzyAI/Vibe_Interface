@@ -743,11 +743,58 @@ function MachineRow({
   const [lifecycleMessage, setLifecycleMessage] = useState<string | null>(null);
   const [reconnectCode, setReconnectCode] = useState<{ code: string; command: string; advancedCommand: string; relayUrl: string } | null>(null);
   const [copiedReconnectCode, setCopiedReconnectCode] = useState(false);
+  const [menuOpenJobId, setMenuOpenJobId] = useState<string | null>(null);
+  const [confirmDeleteJobId, setConfirmDeleteJobId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   // Session history is only populated for Codex sessions by pi-agent; use it directly.
   const codexSessions = agent.sessionHistory ?? [];
   const reconnect = reconnectCommand(agent, serverOrigin);
   const recentJobs = [...jobs].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 5);
+
+  useEffect(() => {
+    if (!menuOpenJobId) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (!(e.target as HTMLElement).closest("[data-job-menu]")) {
+        setMenuOpenJobId(null);
+        setConfirmDeleteJobId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpenJobId]);
+
+  const archiveJob = (job: RemoteAgentJob) =>
+    startTransition(() => {
+      void (async () => {
+        try {
+          setMenuOpenJobId(null);
+          await requestJson(`/api/remote-agents/jobs/${encodeURIComponent(job.jobId)}/archive`, {
+            method: "POST",
+            body: JSON.stringify({ agentId: agent.agentId }),
+          });
+          await onRefresh();
+        } catch (e) {
+          setLifecycleError(e instanceof Error ? e.message : "Failed to archive session");
+        }
+      })();
+    });
+
+  const removeJob = (job: RemoteAgentJob) =>
+    startTransition(() => {
+      void (async () => {
+        try {
+          setMenuOpenJobId(null);
+          setConfirmDeleteJobId(null);
+          await requestJson(`/api/remote-agents/jobs/${encodeURIComponent(job.jobId)}/delete`, {
+            method: "POST",
+            body: JSON.stringify({ agentId: agent.agentId }),
+          });
+          await onRefresh();
+        } catch (e) {
+          setLifecycleError(e instanceof Error ? e.message : "Failed to remove session");
+        }
+      })();
+    });
 
   const disconnectMachine = () =>
     startTransition(() => {
@@ -951,18 +998,88 @@ function MachineRow({
                 key={job.jobId}
                 className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-base)] px-3 py-2"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
+                <div className="flex items-start gap-2">
+                  <a
+                    href={`/remote-sessions/${encodeURIComponent(job.jobId)}`}
+                    className="min-w-0 flex-1 hover:no-underline"
+                  >
                     <p className="truncate text-[12px] font-semibold text-[var(--color-text-primary)]">
                       {job.title}
                     </p>
                     <p className="mt-1 truncate text-[11px] text-[var(--color-text-secondary)]">
                       {job.cwd || agent.worktree || agent.repoRoot || "unknown cwd"}
                     </p>
-                  </div>
-                  <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${jobTone(job)}`}>
+                  </a>
+                  <span className={`shrink-0 self-start rounded-full border px-2.5 py-1 text-[11px] font-semibold ${jobTone(job)}`}>
                     {job.status}
                   </span>
+                  <div className="relative shrink-0 self-start" data-job-menu>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpenJobId(menuOpenJobId === job.jobId ? null : job.jobId);
+                        setConfirmDeleteJobId(null);
+                      }}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
+                      aria-label="Session actions"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <circle cx="8" cy="3" r="1.5" />
+                        <circle cx="8" cy="8" r="1.5" />
+                        <circle cx="8" cy="13" r="1.5" />
+                      </svg>
+                    </button>
+                    {menuOpenJobId === job.jobId ? (
+                      <div className="absolute right-0 top-7 z-50 min-w-[168px] rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] py-1 shadow-md">
+                        <a
+                          href={`/remote-sessions/${encodeURIComponent(job.jobId)}`}
+                          className="flex items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)] hover:no-underline"
+                          onClick={() => setMenuOpenJobId(null)}
+                        >
+                          Open session
+                        </a>
+                        <button
+                          type="button"
+                          disabled={job.status === "running" || isPending}
+                          onClick={() => archiveJob(job)}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Archive
+                        </button>
+                        {confirmDeleteJobId === job.jobId ? (
+                          <div className="border-t border-[var(--color-border-subtle)] px-3 py-2">
+                            <p className="mb-2 text-[11px] text-[var(--color-text-secondary)]">Remove this session?</p>
+                            <div className="flex gap-1.5">
+                              <button
+                                type="button"
+                                disabled={isPending}
+                                onClick={() => removeJob(job)}
+                                className="flex-1 rounded-md bg-[var(--color-accent-red)] px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
+                              >
+                                Remove
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteJobId(null)}
+                                className="flex-1 rounded-md border border-[var(--color-border-default)] px-2 py-1 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => setConfirmDeleteJobId(job.jobId)}
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-[12px] text-[var(--color-accent-red)] hover:bg-[var(--color-bg-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 <p className="mt-2 truncate text-[11px] text-[var(--color-text-tertiary)]">
                   {job.command?.[1] === "claude" ? "Claude Code" : job.command?.[1] === "codex" ? "Codex" : job.command?.[1] ?? ""}
