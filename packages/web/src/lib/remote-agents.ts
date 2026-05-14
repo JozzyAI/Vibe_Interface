@@ -128,7 +128,9 @@ function defaultStore(): RemoteAgentStore {
 }
 
 let lastGoodStore: RemoteAgentStore | null = null;
-let storeWriteQueue: Promise<void> = Promise.resolve();
+let storeInitialized = false;
+let debounceWriteTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingWriteStore: RemoteAgentStore | null = null;
 
 async function storePath(): Promise<string> {
   const { config } = await getServices();
@@ -136,6 +138,8 @@ async function storePath(): Promise<string> {
 }
 
 async function readStore(): Promise<RemoteAgentStore> {
+  // Use in-memory state after first load — avoids a file read on every request.
+  if (storeInitialized && lastGoodStore) return lastGoodStore;
   try {
     const raw = await readFile(await storePath(), "utf8");
     const parsed = JSON.parse(raw) as Partial<RemoteAgentStore>;
@@ -150,24 +154,41 @@ async function readStore(): Promise<RemoteAgentStore> {
       controlCommands: Array.isArray(parsed.controlCommands) ? parsed.controlCommands : [],
     };
     lastGoodStore = store;
+    storeInitialized = true;
     return store;
   } catch {
+    storeInitialized = true;
     return lastGoodStore ?? defaultStore();
   }
 }
 
-async function writeStore(store: RemoteAgentStore): Promise<void> {
-  const path = await storePath();
-  const payload = JSON.stringify(store, null, 2);
-  const write = async () => {
+async function flushStoreToDisk(): Promise<void> {
+  const store = pendingWriteStore;
+  pendingWriteStore = null;
+  if (!store) return;
+  try {
+    const path = await storePath();
     await mkdir(dirname(path), { recursive: true });
     const tempPath = `${path}.${Date.now()}.${randomUUID()}.tmp`;
-    await writeFile(tempPath, payload, "utf8");
+    await writeFile(tempPath, JSON.stringify(store, null, 2), "utf8");
     await rename(tempPath, path);
-    lastGoodStore = store;
-  };
-  storeWriteQueue = storeWriteQueue.then(write, write);
-  await storeWriteQueue;
+  } catch {
+    // next debounce cycle will retry
+  }
+}
+
+async function writeStore(store: RemoteAgentStore): Promise<void> {
+  // Update in-memory state immediately so subsequent reads see the change.
+  lastGoodStore = store;
+  storeInitialized = true;
+  // Coalesce concurrent writes — only the latest state reaches disk.
+  pendingWriteStore = store;
+  if (!debounceWriteTimer) {
+    debounceWriteTimer = setTimeout(() => {
+      debounceWriteTimer = null;
+      void flushStoreToDisk();
+    }, 150);
+  }
 }
 
 function appendRemoteEvent(
