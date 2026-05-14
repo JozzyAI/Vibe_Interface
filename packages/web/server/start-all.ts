@@ -95,7 +95,8 @@ function resolveNextBin(): string {
 
 // Start Next.js production server
 const port = process.env["PORT"] || "3000";
-spawnProcess("next", resolveNextBin(), ["start", "-p", port]);
+const hostname = process.env["HOSTNAME"] || "0.0.0.0";
+spawnProcess("next", resolveNextBin(), ["start", "-p", port, "-H", hostname]);
 
 // Start direct terminal WebSocket server (auto-restart on crash)
 spawnProcess("direct-terminal", "node", [resolve(__dirname, "direct-terminal-ws.js")], { restart: true });
