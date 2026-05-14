@@ -95,6 +95,19 @@ export function PIWorkspaceShell({
           <RailIcon href="/agents" label="Machines" active={active === "agents"}>@</RailIcon>
           {/* <RailIcon href="/ideas" label="Drafts" active={active === "drafts"}>#</RailIcon> */}
         </nav>
+        {process.env.PI_ACCESS_TOKEN ? (
+          <a
+            href="/api/auth/logout"
+            title="Sign out"
+            className="mb-1 grid h-9 w-9 place-items-center rounded-xl text-[#c0c5cd] hover:bg-[#f4f5f5] hover:text-[#30333a]"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3" />
+              <path d="M10.5 11L14 8l-3.5-3" />
+              <path d="M14 8H6" />
+            </svg>
+          </a>
+        ) : null}
       </aside>
 
       <aside className="flex w-[352px] shrink-0 flex-col border-r border-[#ececea] bg-white">
