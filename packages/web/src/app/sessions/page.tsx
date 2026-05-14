@@ -17,7 +17,12 @@ export const metadata: Metadata = {
 };
 
 export default async function SessionsPage() {
-  const pageData = await getDashboardPageData("all");
+  const workspaceRoot = getPIIdeaExecutionRoot();
+  const [pageData, remoteOverview, workspaceFiles] = await Promise.all([
+    getDashboardPageData("all"),
+    getRemoteApprovalOverview(),
+    readPIWorkspaceFiles(workspaceRoot),
+  ]);
   const cards = await Promise.all(
     pageData.projects.map(async (project: { id: string; name: string; sessionPrefix?: string }) => {
       const projectPageData = await getDashboardPageData(project.id);
@@ -32,11 +37,6 @@ export default async function SessionsPage() {
       };
     }),
   );
-  const workspaceRoot = getPIIdeaExecutionRoot();
-  const [remoteOverview, workspaceFiles] = await Promise.all([
-    getRemoteApprovalOverview(),
-    readPIWorkspaceFiles(workspaceRoot),
-  ]);
   const connectedCount = remoteOverview.agents.filter(
     (agent) => agent.connectionState === "connected",
   ).length;

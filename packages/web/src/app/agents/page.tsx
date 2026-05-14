@@ -115,10 +115,10 @@ function MachineSidebar({
 export default async function AgentsPage(props: {
   searchParams?: Promise<{ machine?: string }>;
 }) {
-  const searchParams = await props.searchParams;
-  const pageData = await getDashboardPageData("all");
   const workspaceRoot = getPIIdeaExecutionRoot();
-  const [remoteOverview, workspaceFiles] = await Promise.all([
+  const [searchParams, pageData, remoteOverview, workspaceFiles] = await Promise.all([
+    props.searchParams,
+    getDashboardPageData("all"),
     getRemoteApprovalOverview(),
     readPIWorkspaceFiles(workspaceRoot),
   ]);
