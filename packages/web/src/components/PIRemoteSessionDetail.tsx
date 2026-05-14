@@ -670,9 +670,9 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
     [
       "rounded-full px-4 py-2 text-[12px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
       tone === "danger"
-        ? "border border-[#ff3b4f] bg-[#22070b] text-[#ff6b78] hover:bg-[#350a11]"
+        ? "border border-[#fca5a5] bg-[#fff5f5] text-[#dc2626] hover:bg-[#fee2e2]"
         : tone === "secondary"
-          ? "border border-[#556070] bg-[#111722] text-[#d8e2ff] hover:bg-[#182235]"
+          ? "border border-[#c7d2fe] bg-[#f0f4ff] text-[#3730a3] hover:bg-[#e0e7ff]"
           : "border border-[#6f7bff] bg-[#5964d8] text-white hover:bg-[#6873ee]",
     ].join(" ");
 
@@ -957,7 +957,7 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
                     {utilityJob.status} - {formatRelativeTime(utilityJob.updatedAt)}
                   </span>
                 </span>
-                <span className="shrink-0 rounded-full bg-[#111111] px-3 py-1.5 text-[12px] font-semibold text-white">
+                <span className="shrink-0 rounded-full bg-[#1a1918] px-3 py-1.5 text-[12px] font-semibold text-white">
                   Open
                 </span>
               </a>
