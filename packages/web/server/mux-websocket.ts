@@ -425,10 +425,10 @@ class TerminalManager {
         }
         // Ring buffer (same logic as local PTY)
         terminal.buffer.push(data);
-        terminal.bufferBytes += Buffer.byteLength(data, "binary");
+        terminal.bufferBytes += Buffer.byteLength(data, "utf8");
         while (terminal.bufferBytes > RING_BUFFER_MAX && terminal.buffer.length > 0) {
           const removed = terminal.buffer.shift() ?? "";
-          terminal.bufferBytes -= Buffer.byteLength(removed, "binary");
+          terminal.bufferBytes -= Buffer.byteLength(removed, "utf8");
         }
       },
       (exitCode: number) => {

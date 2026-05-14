@@ -421,6 +421,26 @@ class TerminalRelayClient:
         except OSError:
             pass
 
+        # Build a sane environment for the tmux attach process.
+        # Explicitly set UTF-8 locale so PTY output is UTF-8 encoded regardless
+        # of what the parent process inherited. Shell aliases are not expanded in
+        # subprocess launches so we cannot rely on alias-based workarounds.
+        pty_env = {**os.environ}
+        # Use C.UTF-8 if available; fall back to en_US.UTF-8 or current locale.
+        for candidate in ("C.UTF-8", "en_US.UTF-8"):
+            import locale as _locale
+            try:
+                _locale.setlocale(_locale.LC_ALL, candidate)
+                _locale.resetlocale()
+                pty_env["LANG"] = candidate
+                pty_env["LC_ALL"] = candidate
+                break
+            except _locale.Error:
+                continue
+        pty_env.setdefault("LANG", os.environ.get("LANG", "C.UTF-8"))
+        pty_env.setdefault("LC_ALL", os.environ.get("LC_ALL", "C.UTF-8"))
+        pty_env["TERM"] = "xterm-256color"
+
         try:
             proc = subprocess.Popen(
                 [tmux, "attach-session", "-t", session_id],
@@ -429,6 +449,7 @@ class TerminalRelayClient:
                 stderr=slave_fd,
                 close_fds=True,
                 preexec_fn=os.setsid,  # new session = new process group
+                env=pty_env,
             )
         except Exception as exc:
             os.close(slave_fd)

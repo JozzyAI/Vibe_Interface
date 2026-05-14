@@ -29,6 +29,7 @@
  */
 
 import { WebSocketServer, WebSocket } from "ws";
+import { StringDecoder } from "node:string_decoder";
 import type { IncomingMessage } from "node:http";
 import type { Socket } from "node:net";
 
@@ -86,6 +87,9 @@ export class RemoteTerminalRelay {
   private readonly sessionToPeerId = new Map<string, string>(); // sessionId → agentId
   private readonly dataCallbacks = new Map<string, Set<(data: string) => void>>();
   private readonly exitCallbacks = new Map<string, Set<(code: number) => void>>();
+  // Per-session streaming UTF-8 decoder — buffers incomplete multi-byte sequences
+  // at 4096-byte PTY read boundaries so they never reach xterm.js as mojibake.
+  private readonly sessionDecoders = new Map<string, StringDecoder>();
   private readonly allowedTokens: Set<string>;
   // Listeners notified whenever a pi-agent announces (or re-announces) sessions.
   // Used by the mux to retry pending opens that failed because the relay was not
@@ -137,7 +141,7 @@ export class RemoteTerminalRelay {
 
   /**
    * Forward keyboard input to pi-agent.
-   * data is a binary string from xterm.js; we base64-encode for transport.
+   * data is a UTF-8 string from xterm.js; base64-encode the UTF-8 bytes for transport.
    */
   writeRemote(sessionId: string, data: string): void {
     const peer = this.getRelayForSession(sessionId);
@@ -145,7 +149,7 @@ export class RemoteTerminalRelay {
     peer.send({
       type: "terminal_input",
       sessionId,
-      data: Buffer.from(data, "binary").toString("base64"),
+      data: Buffer.from(data, "utf8").toString("base64"),
     });
   }
 
@@ -276,10 +280,17 @@ export class RemoteTerminalRelay {
           const cbs = this.dataCallbacks.get(msg.sessionId);
           if (!cbs?.size) return;
 
-          // Decode base64 PTY output → binary string for xterm.js
+          // Decode base64 PTY bytes → UTF-8 string using a streaming decoder so
+          // incomplete multi-byte sequences at 4096-byte read boundaries are
+          // buffered rather than replaced with U+FFFD (which caused mojibake).
           let decoded: string;
           try {
-            decoded = Buffer.from(msg.data, "base64").toString("binary");
+            if (!this.sessionDecoders.has(msg.sessionId)) {
+              this.sessionDecoders.set(msg.sessionId, new StringDecoder("utf8"));
+            }
+            decoded = this.sessionDecoders.get(msg.sessionId)!.write(
+              Buffer.from(msg.data, "base64"),
+            );
           } catch {
             return;
           }
@@ -306,6 +317,7 @@ export class RemoteTerminalRelay {
             }
           }
           this.sessionToPeerId.delete(msg.sessionId);
+          this.sessionDecoders.delete(msg.sessionId);
           console.log(`[RelayServer] Remote terminal exited: ${msg.sessionId} (code ${msg.exitCode})`);
           break;
         }
