@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
-import { archiveRemoteAgentJob } from "@/lib/remote-agents";
+import { getRemoteAgentsBackend } from "@/lib/backend";
 
 export async function POST(
   request: NextRequest,
@@ -10,6 +10,7 @@ export async function POST(
   try {
     const params = await props.params;
     const body = (await request.json().catch(() => ({}))) as { agentId?: string };
+    const { archiveRemoteAgentJob } = await getRemoteAgentsBackend();
     const job = await archiveRemoteAgentJob({ jobId: params.id, agentId: body.agentId });
     return jsonWithCorrelation({ job }, { status: 200 }, correlationId);
   } catch (error) {

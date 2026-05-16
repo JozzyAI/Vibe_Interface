@@ -11,6 +11,6 @@
     "typecheck": "pnpm --filter @pi/core typecheck && pnpm --filter @pi/web typecheck"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "node-pty", "sharp"]
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild", "node-pty", "sharp"]
   }
 }

@@ -5,8 +5,15 @@ primary_region = "sin"   # Singapore — change to nearest region
   dockerfile = "Dockerfile"
 
 [env]
-  PI_RELAY_PORT = "8787"
-  PI_RELAY_HOST = "0.0.0.0"
+  PI_RELAY_PORT    = "8787"
+  PI_RELAY_HOST    = "0.0.0.0"
+  PI_RELAY_DB_PATH = "/data/pi-relay.db"
+
+# Persistent volume — REQUIRED for production.
+# Create before first deploy: fly volumes create pi_relay_data --size 1 --region sin
+[mounts]
+  source      = "pi_relay_data"
+  destination = "/data"
 
 [[services]]
   internal_port = 8787

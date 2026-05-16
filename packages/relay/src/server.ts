@@ -9,6 +9,8 @@ import { createRequire } from "node:module";
 import type { WebSocket } from "ws";
 import { authorizeRelayToken, loadRelayTokens } from "./auth.js";
 import { RelayRegistry, type RelayConnection } from "./routing.js";
+import { getDb, bootstrapOwner } from "./db.js";
+import * as store from "./store.js";
 import type {
   RelayDispatchResult,
   RelayEnvelope,
@@ -36,29 +38,17 @@ function sendJson(socket: WebSocket, message: RelayEnvelope) {
 }
 
 function makeError(code: string, message: string): RelayEnvelope<RelayErrorPayload> {
-  return {
-    type: "error",
-    sentAt: new Date().toISOString(),
-    payload: { code, message },
-  };
+  return { type: "error", sentAt: new Date().toISOString(), payload: { code, message } };
 }
 
-function httpRelayError(code: string, message: string) {
-  return {
-    error: code,
-    message,
-    emittedAt: new Date().toISOString(),
-  };
+function httpError(code: string, message: string) {
+  return { error: code, message, emittedAt: new Date().toISOString() };
 }
 
 function extractBearerToken(authorization: string | undefined): string | null {
-  if (!authorization) {
-    return null;
-  }
+  if (!authorization) return null;
   const [scheme, token] = authorization.split(" ");
-  if (scheme?.toLowerCase() !== "bearer" || !token) {
-    return null;
-  }
+  if (scheme?.toLowerCase() !== "bearer" || !token) return null;
   return token.trim();
 }
 
@@ -71,234 +61,383 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return raw ? (JSON.parse(raw) as unknown) : {};
 }
 
-function getPiBaseUrl(): string | null {
-  return process.env.PI_RELAY_PI_BASE_URL?.replace(/\/$/, "") ?? null;
-}
-
-async function proxyToPi(pathname: string, method: string, payload?: unknown) {
-  const piBaseUrl = getPiBaseUrl();
-  if (!piBaseUrl) {
-    throw new Error("PI_RELAY_PI_BASE_URL is not configured.");
-  }
-
-  const response = await fetch(`${piBaseUrl}${pathname}`, {
-    method,
-    headers: payload ? { "Content-Type": "application/json" } : undefined,
-    body: payload ? JSON.stringify(payload) : undefined,
-  });
-
-  const raw = await response.text();
-  const parsed = raw ? JSON.parse(raw) : {};
-  if (!response.ok) {
-    const message =
-      typeof parsed === "object" && parsed && "error" in parsed
-        ? String((parsed as { error?: unknown }).error ?? "Relay PI proxy failed")
-        : `Relay PI proxy failed (${response.status})`;
-    throw new Error(message);
-  }
-  return parsed;
-}
-
 function dispatchToPeer(
   registry: RelayRegistry,
   type: RelayEnvelope["type"],
   targetPeerId: string,
   payload: unknown,
 ): RelayDispatchResult {
-  const delivered = registry.route({
-    type,
-    to: targetPeerId,
-    sentAt: new Date().toISOString(),
-    payload,
-  });
-
-  if (!delivered) {
-    return {
-      delivered: false,
-      targetPeerId,
-      reason: "target_not_connected",
-    };
-  }
-
-  return {
-    delivered: true,
-    targetPeerId,
-  };
+  const delivered = registry.route({ type, to: targetPeerId, sentAt: new Date().toISOString(), payload });
+  return delivered ? { delivered: true, targetPeerId } : { delivered: false, targetPeerId, reason: "target_not_connected" };
 }
 
 export function createRelayServer(): RelayServer {
+  // Initialize DB and bootstrap owner on startup
+  const db = getDb();
+  bootstrapOwner(db);
+
   const registry = new RelayRegistry();
   const tokens = loadRelayTokens();
 
   const httpServer = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
+    const { pathname } = url;
 
-    if (url.pathname.startsWith("/v1/daemon/")) {
+    // ── Health / presence ──────────────────────────────────────────────────
+    if (pathname === "/health") {
+      const db2 = getDb();
+      const agentCount = (db2.prepare("SELECT COUNT(*) AS cnt FROM agents").get() as { cnt: number }).cnt;
+      jsonResponse(res, 200, {
+        status: "ok",
+        peers: registry.listPeers().length,
+        dbAgents: agentCount,
+      });
+      return;
+    }
+
+    if (pathname === "/presence") {
+      jsonResponse(res, 200, { peers: registry.listPeers() });
+      return;
+    }
+
+    // ── Daemon routes (/v1/daemon/*) ───────────────────────────────────────
+    // Called by pi-agent. Auth: daemon token.
+    if (pathname.startsWith("/v1/daemon/") || pathname.startsWith("/api/remote-agents/enrollments/consume")) {
       const token = extractBearerToken(req.headers.authorization);
-      if (!token) {
-        jsonResponse(res, 401, httpRelayError("unauthorized", "Missing bearer token."));
-        return;
-      }
 
-      const authorized = authorizeRelayToken(tokens, token, "daemon");
-      if (!authorized) {
-        jsonResponse(res, 403, httpRelayError("forbidden", "Relay token is invalid for daemon use."));
-        return;
+      // /api/remote-agents/enrollments/consume is consumed by pi-agent pair command
+      // without any auth token (it uses the enrollment code as auth).
+      const isConsumeAlias =
+        pathname === "/api/remote-agents/enrollments/consume" && req.method === "POST";
+
+      if (!isConsumeAlias) {
+        if (!token) {
+          jsonResponse(res, 401, httpError("unauthorized", "Missing bearer token."));
+          return;
+        }
+        const authorized = authorizeRelayToken(tokens, token, "daemon");
+        if (!authorized) {
+          jsonResponse(res, 403, httpError("forbidden", "Invalid daemon token."));
+          return;
+        }
       }
 
       try {
-        if (url.pathname === "/v1/daemon/register" && req.method === "POST") {
-          const body = await readJsonBody(req);
-          const result = await proxyToPi("/api/remote-agents/register", "POST", body);
+        // register
+        if (pathname === "/v1/daemon/register" && req.method === "POST") {
+          const body = await readJsonBody(req) as Record<string, unknown>;
+          const agent = store.registerAgent({
+            agentId: typeof body["agentId"] === "string" ? body["agentId"] : undefined,
+            displayName: String(body["displayName"] ?? ""),
+            projectLabel: String(body["projectLabel"] ?? ""),
+            toolType: typeof body["toolType"] === "string" ? body["toolType"] : undefined,
+            hostLabel: String(body["hostLabel"] ?? ""),
+            repoRoot: typeof body["repoRoot"] === "string" ? body["repoRoot"] : undefined,
+            branch: typeof body["branch"] === "string" ? body["branch"] : undefined,
+            worktree: typeof body["worktree"] === "string" ? body["worktree"] : undefined,
+            stateFile: typeof body["stateFile"] === "string" ? body["stateFile"] : undefined,
+            logFile: typeof body["logFile"] === "string" ? body["logFile"] : undefined,
+            status: typeof body["status"] === "string" ? body["status"] : undefined,
+            connectionState: typeof body["connectionState"] === "string" ? body["connectionState"] : undefined,
+            consecutiveFailures: typeof body["consecutiveFailures"] === "number" ? body["consecutiveFailures"] : undefined,
+            lastError: typeof body["lastError"] === "string" ? body["lastError"] : undefined,
+            nextRetryAt: typeof body["nextRetryAt"] === "string" ? body["nextRetryAt"] : undefined,
+            relay: body["relay"] != null && typeof body["relay"] === "object" ? body["relay"] as Record<string, unknown> : undefined,
+            sessionHistory: Array.isArray(body["sessionHistory"]) ? body["sessionHistory"] : undefined,
+            authConnectors: Array.isArray(body["authConnectors"]) ? body["authConnectors"] : undefined,
+          });
+          jsonResponse(res, 200, { agent });
+          return;
+        }
+
+        // heartbeat
+        if (pathname === "/v1/daemon/heartbeat" && req.method === "POST") {
+          const body = await readJsonBody(req) as Record<string, unknown>;
+          const result = store.heartbeatAgent({
+            agentId: String(body["agentId"] ?? ""),
+            status: typeof body["status"] === "string" ? body["status"] : undefined,
+            branch: typeof body["branch"] === "string" ? body["branch"] : undefined,
+            worktree: typeof body["worktree"] === "string" ? body["worktree"] : undefined,
+            repoRoot: typeof body["repoRoot"] === "string" ? body["repoRoot"] : undefined,
+            stateFile: typeof body["stateFile"] === "string" ? body["stateFile"] : undefined,
+            logFile: typeof body["logFile"] === "string" ? body["logFile"] : undefined,
+            connectionState: typeof body["connectionState"] === "string" ? body["connectionState"] : undefined,
+            consecutiveFailures: typeof body["consecutiveFailures"] === "number" ? body["consecutiveFailures"] : undefined,
+            lastError: typeof body["lastError"] === "string" ? body["lastError"] : undefined,
+            nextRetryAt: typeof body["nextRetryAt"] === "string" ? body["nextRetryAt"] : undefined,
+            relay: body["relay"] != null && typeof body["relay"] === "object" ? body["relay"] as Record<string, unknown> : undefined,
+            sessionHistory: Array.isArray(body["sessionHistory"]) ? body["sessionHistory"] : undefined,
+            authConnectors: Array.isArray(body["authConnectors"]) ? body["authConnectors"] : undefined,
+          });
           jsonResponse(res, 200, result);
           return;
         }
 
-        if (url.pathname === "/v1/daemon/heartbeat" && req.method === "POST") {
-          const body = await readJsonBody(req);
-          const result = await proxyToPi("/api/remote-agents/heartbeat", "POST", body);
-          jsonResponse(res, 200, result);
-          return;
-        }
-
-        if (url.pathname === "/v1/daemon/requests" && req.method === "POST") {
-          const body = await readJsonBody(req);
-          const result = await proxyToPi("/api/remote-agents/requests", "POST", body);
-          jsonResponse(res, 200, result);
-          return;
-        }
-
-        if (url.pathname === "/v1/daemon/jobs/report" && req.method === "POST") {
-          const body = await readJsonBody(req);
-          const result = await proxyToPi("/api/remote-agents/jobs/report", "POST", body);
-          jsonResponse(res, 200, result);
-          return;
-        }
-
-        const pollMatch = url.pathname.match(/^\/v1\/daemon\/agents\/([^/]+)\/poll$/);
+        // poll
+        const pollMatch = pathname.match(/^\/v1\/daemon\/agents\/([^/]+)\/poll$/);
         if (pollMatch && req.method === "GET") {
-          const agentId = encodeURIComponent(decodeURIComponent(pollMatch[1] ?? ""));
-          const result = await proxyToPi(`/api/remote-agents/agents/${agentId}/poll`, "GET");
+          const agentId = decodeURIComponent(pollMatch[1] ?? "");
+          const result = store.pollAgent(agentId);
           jsonResponse(res, 200, result);
           return;
         }
 
-        jsonResponse(res, 404, httpRelayError("not_found", "Unknown relay daemon endpoint."));
+        // jobs/report
+        if (pathname === "/v1/daemon/jobs/report" && req.method === "POST") {
+          const body = await readJsonBody(req) as Record<string, unknown>;
+          const job = store.reportJob({
+            agentId: String(body["agentId"] ?? ""),
+            jobId: String(body["jobId"] ?? ""),
+            status: String(body["status"] ?? "running"),
+            pid: typeof body["pid"] === "number" ? body["pid"] : undefined,
+            tmuxSession: typeof body["tmuxSession"] === "string" ? body["tmuxSession"] : undefined,
+            exitCode: typeof body["exitCode"] === "number" ? body["exitCode"] : undefined,
+            logFile: typeof body["logFile"] === "string" ? body["logFile"] : undefined,
+            logTail: typeof body["logTail"] === "string" ? body["logTail"] : undefined,
+            providerState: body["providerState"] !== undefined ? body["providerState"] : undefined,
+            artifactsDir: typeof body["artifactsDir"] === "string" ? body["artifactsDir"] : undefined,
+            error: typeof body["error"] === "string" ? body["error"] : undefined,
+            progress: typeof body["progress"] === "string" ? body["progress"] : undefined,
+            todo: typeof body["todo"] === "string" ? body["todo"] : undefined,
+            notes: typeof body["notes"] === "string" ? body["notes"] : undefined,
+            handoffTitle: typeof body["handoffTitle"] === "string" ? body["handoffTitle"] : undefined,
+          });
+          jsonResponse(res, 200, { job });
+          return;
+        }
+
+        // approval requests
+        if (pathname === "/v1/daemon/requests" && req.method === "POST") {
+          const body = await readJsonBody(req) as Record<string, unknown>;
+          const approvalRequest = store.createApprovalRequest({
+            agentId: String(body["agentId"] ?? ""),
+            parentJobId: typeof body["parentJobId"] === "string" ? body["parentJobId"] : undefined,
+            title: String(body["title"] ?? ""),
+            message: String(body["message"] ?? ""),
+            riskLevel: typeof body["riskLevel"] === "string" ? body["riskLevel"] : undefined,
+            command: typeof body["command"] === "string" ? body["command"] : undefined,
+            actionKind: typeof body["actionKind"] === "string" ? body["actionKind"] : undefined,
+            eventType: typeof body["eventType"] === "string" ? body["eventType"] : undefined,
+            primaryAction: typeof body["primaryAction"] === "string" ? body["primaryAction"] : undefined,
+          });
+          // Push to dashboard if connected
+          const agentId = approvalRequest.agentId;
+          registry.route({ type: "approval_request", to: "pi-dashboard", sentAt: new Date().toISOString(), from: agentId, payload: approvalRequest });
+          jsonResponse(res, 200, { approvalRequest });
+          return;
+        }
+
+        // enrollment consume (daemon path — called during pi-agent pairing)
+        if ((pathname === "/v1/daemon/enrollments/consume" || isConsumeAlias) && req.method === "POST") {
+          const body = await readJsonBody(req) as Record<string, unknown>;
+          const result = store.consumeEnrollment(String(body["code"] ?? ""));
+          jsonResponse(res, 200, result);
+          return;
+        }
+
+        jsonResponse(res, 404, httpError("not_found", "Unknown daemon endpoint."));
         return;
       } catch (error) {
-        jsonResponse(
-          res,
-          502,
-          httpRelayError(
-            "pi_proxy_failed",
-            error instanceof Error ? error.message : "Relay failed to proxy the daemon request to PI.",
-          ),
-        );
+        jsonResponse(res, error instanceof Error && error.message.startsWith("Unknown") ? 410 : 500, {
+          error: error instanceof Error ? error.message : "Daemon request failed",
+        });
         return;
       }
     }
 
-    if (url.pathname.startsWith("/v1/pi/")) {
+    // ── PI / dashboard routes (/v1/pi/*) ───────────────────────────────────
+    // Called by dashboard client. Auth: pi token.
+    if (pathname.startsWith("/v1/pi/")) {
       const token = extractBearerToken(req.headers.authorization);
       if (!token) {
-        jsonResponse(res, 401, httpRelayError("unauthorized", "Missing bearer token."));
+        jsonResponse(res, 401, httpError("unauthorized", "Missing bearer token."));
         return;
       }
-
       const authorized = authorizeRelayToken(tokens, token, "pi");
       if (!authorized) {
-        jsonResponse(res, 403, httpRelayError("forbidden", "Relay token is invalid for PI use."));
+        jsonResponse(res, 403, httpError("forbidden", "Invalid PI token."));
         return;
       }
 
       try {
-        if (url.pathname === "/v1/pi/approval-decisions" && req.method === "POST") {
-          const body = (await readJsonBody(req)) as {
-            agentId?: string;
-            request?: unknown;
-          };
+        // overview
+        if (pathname === "/v1/pi/overview" && req.method === "GET") {
+          jsonResponse(res, 200, store.getOverview());
+          return;
+        }
+
+        // enrollments list
+        if (pathname === "/v1/pi/enrollments" && req.method === "GET") {
+          jsonResponse(res, 200, {
+            enrollments: store.listActiveEnrollments(),
+            recentEnrollments: store.listRecentEnrollments(),
+          });
+          return;
+        }
+
+        // create enrollment
+        if (pathname === "/v1/pi/enrollments" && req.method === "POST") {
+          const body = await readJsonBody(req) as Record<string, unknown>;
+          const enrollment = store.createEnrollment({
+            displayName: String(body["displayName"] ?? ""),
+            projectLabel: String(body["projectLabel"] ?? ""),
+            toolType: typeof body["toolType"] === "string" ? body["toolType"] : undefined,
+            expiresInMinutes: typeof body["expiresInMinutes"] === "number" ? body["expiresInMinutes"] : 60,
+          });
+          jsonResponse(res, 200, { enrollment });
+          return;
+        }
+
+        // revoke enrollment
+        const revokeMatch = pathname.match(/^\/v1\/pi\/enrollments\/([^/]+)\/revoke$/);
+        if (revokeMatch && req.method === "POST") {
+          const enrollmentId = decodeURIComponent(revokeMatch[1] ?? "");
+          const enrollment = store.revokeEnrollment(enrollmentId);
+          jsonResponse(res, 200, { enrollment });
+          return;
+        }
+
+        // create job
+        if (pathname === "/v1/pi/jobs" && req.method === "POST") {
+          const body = await readJsonBody(req) as Record<string, unknown>;
+          const job = store.createJob({
+            agentId: String(body["agentId"] ?? ""),
+            title: typeof body["title"] === "string" ? body["title"] : undefined,
+            command: Array.isArray(body["command"]) ? body["command"] as string[] : [],
+            provider: typeof body["provider"] === "string" ? body["provider"] : undefined,
+            cwd: typeof body["cwd"] === "string" ? body["cwd"] : undefined,
+            env: body["env"] != null && typeof body["env"] === "object" ? body["env"] as Record<string, string> : undefined,
+            model: typeof body["model"] === "string" ? body["model"] : undefined,
+            reasoningEffort: typeof body["reasoningEffort"] === "string" ? body["reasoningEffort"] : undefined,
+            ralphEnabled: body["ralphEnabled"] === true,
+            autoResumeUsageLimit: body["autoResumeUsageLimit"] === true,
+            autoRestartCodex: body["autoRestartCodex"] === true,
+          });
+          // Dispatch to agent if connected
+          const dispatch = dispatchToPeer(registry, "job_request", job.agentId, job);
+          jsonResponse(res, 200, { job, relayDispatch: dispatch });
+          return;
+        }
+
+        // archive job
+        const archiveMatch = pathname.match(/^\/v1\/pi\/jobs\/([^/]+)\/archive$/);
+        if (archiveMatch && req.method === "POST") {
+          const jobId = decodeURIComponent(archiveMatch[1] ?? "");
+          const body = await readJsonBody(req) as Record<string, unknown>;
+          const job = store.archiveJob(jobId, typeof body["agentId"] === "string" ? body["agentId"] : undefined);
+          jsonResponse(res, 200, { job });
+          return;
+        }
+
+        // delete job
+        const deleteMatch = pathname.match(/^\/v1\/pi\/jobs\/([^/]+)\/delete$/);
+        if (deleteMatch && req.method === "POST") {
+          const jobId = decodeURIComponent(deleteMatch[1] ?? "");
+          const body = await readJsonBody(req) as Record<string, unknown>;
+          const result = store.removeJob(jobId, typeof body["agentId"] === "string" ? body["agentId"] : undefined);
+          jsonResponse(res, 200, { removed: true, ...result });
+          return;
+        }
+
+        // restart job
+        const restartMatch = pathname.match(/^\/v1\/pi\/jobs\/([^/]+)\/restart$/);
+        if (restartMatch && req.method === "POST") {
+          const jobId = decodeURIComponent(restartMatch[1] ?? "");
+          const body = await readJsonBody(req) as Record<string, unknown>;
+          const job = store.restartJob(jobId, typeof body["agentId"] === "string" ? body["agentId"] : undefined);
+          const dispatch = dispatchToPeer(registry, "job_request", job.agentId, job);
+          jsonResponse(res, 200, { job, relayDispatch: dispatch });
+          return;
+        }
+
+        // respond to approval
+        const respondMatch = pathname.match(/^\/v1\/pi\/approvals\/([^/]+)\/respond$/);
+        if (respondMatch && req.method === "POST") {
+          const requestId = decodeURIComponent(respondMatch[1] ?? "");
+          const body = await readJsonBody(req) as Record<string, unknown>;
+          const approvalRequest = store.respondToApproval(
+            requestId,
+            String(body["action"] ?? "reject"),
+            typeof body["response"] === "string" ? body["response"] : undefined,
+          );
+          const dispatch = dispatchToPeer(registry, "approval_decision", approvalRequest.agentId, approvalRequest);
+          jsonResponse(res, 200, { approvalRequest, relayDispatch: dispatch });
+          return;
+        }
+
+        // remove agent
+        const removeAgentMatch = pathname.match(/^\/v1\/pi\/agents\/([^/]+)\/remove$/);
+        if (removeAgentMatch && req.method === "POST") {
+          const agentId = decodeURIComponent(removeAgentMatch[1] ?? "");
+          store.removeAgent(agentId);
+          jsonResponse(res, 200, { removed: true });
+          return;
+        }
+
+        // reconnect agent (create re-pair enrollment)
+        const reconnectMatch = pathname.match(/^\/v1\/pi\/agents\/([^/]+)\/reconnect$/);
+        if (reconnectMatch && req.method === "POST") {
+          const agentId = decodeURIComponent(reconnectMatch[1] ?? "");
+          const result = store.createReconnectEnrollment(agentId);
+          jsonResponse(res, 200, result);
+          return;
+        }
+
+        // restart daemon
+        const restartDaemonMatch = pathname.match(/^\/v1\/pi\/agents\/([^/]+)\/restart-daemon$/);
+        if (restartDaemonMatch && req.method === "POST") {
+          const agentId = decodeURIComponent(restartDaemonMatch[1] ?? "");
+          const command = store.requestDaemonRestart(agentId);
+          jsonResponse(res, 200, { command });
+          return;
+        }
+
+        // Existing dispatch routes (kept for compat with dashboard relay-dispatch.ts)
+        if (pathname === "/v1/pi/approval-decisions" && req.method === "POST") {
+          const body = (await readJsonBody(req)) as { agentId?: string; request?: unknown };
           const agentId = typeof body.agentId === "string" ? body.agentId : null;
-          if (!agentId) {
-            jsonResponse(res, 400, httpRelayError("invalid_payload", "Missing agentId."));
-            return;
-          }
+          if (!agentId) { jsonResponse(res, 400, httpError("invalid_payload", "Missing agentId.")); return; }
           jsonResponse(res, 200, dispatchToPeer(registry, "approval_decision", agentId, body.request));
           return;
         }
 
-        if (url.pathname === "/v1/pi/jobs/dispatch" && req.method === "POST") {
-          const body = (await readJsonBody(req)) as {
-            agentId?: string;
-            job?: unknown;
-          };
+        if (pathname === "/v1/pi/jobs/dispatch" && req.method === "POST") {
+          const body = (await readJsonBody(req)) as { agentId?: string; job?: unknown };
           const agentId = typeof body.agentId === "string" ? body.agentId : null;
-          if (!agentId) {
-            jsonResponse(res, 400, httpRelayError("invalid_payload", "Missing agentId."));
-            return;
-          }
+          if (!agentId) { jsonResponse(res, 400, httpError("invalid_payload", "Missing agentId.")); return; }
           jsonResponse(res, 200, dispatchToPeer(registry, "job_request", agentId, body.job));
           return;
         }
 
-        jsonResponse(res, 404, httpRelayError("not_found", "Unknown relay PI endpoint."));
+        jsonResponse(res, 404, httpError("not_found", "Unknown PI endpoint."));
         return;
       } catch (error) {
-        jsonResponse(
-          res,
-          502,
-          httpRelayError(
-            "relay_dispatch_failed",
-            error instanceof Error ? error.message : "Relay failed to dispatch the PI message.",
-          ),
-        );
+        jsonResponse(res, error instanceof Error && error.message.startsWith("Unknown") ? 404 : 500, {
+          error: error instanceof Error ? error.message : "PI request failed",
+        });
         return;
       }
-    }
-
-    if (url.pathname === "/health") {
-      jsonResponse(res, 200, {
-        status: "ok",
-        peers: registry.listPeers().length,
-      });
-      return;
-    }
-
-    if (url.pathname === "/presence") {
-      jsonResponse(res, 200, {
-        peers: registry.listPeers(),
-      });
-      return;
     }
 
     res.writeHead(404);
     res.end("Not found");
   });
 
+  // ── WebSocket: general relay (/ws) ─────────────────────────────────────────
   const wss = new WebSocketServer({ noServer: true });
 
-  // ── Terminal relay proxy (/pi-agent-relay) ────────────────────────────────
-  // Proxies terminal WebSocket traffic between pi-agents and the PI dashboard.
-  // Agents authenticate with a daemon token; the dashboard authenticates with
-  // a pi token.  The relay tags agent→dashboard frames with agentId and strips
-  // it from dashboard→agent frames before forwarding.
+  // ── WebSocket: terminal relay (/pi-agent-relay) ────────────────────────────
   const terminalWss = new WebSocketServer({ noServer: true });
-
-  // agentId → agent WebSocket
   const terminalAgents = new Map<string, WebSocket>();
-  // Single dashboard subscriber WebSocket (one PI dashboard at a time)
   let terminalDashboard: WebSocket | null = null;
 
   function sendToAgent(agentId: string, msg: object): void {
     const agentWs = terminalAgents.get(agentId);
-    if (agentWs?.readyState === 1 /* OPEN */) {
-      agentWs.send(JSON.stringify(msg));
-    }
+    if (agentWs?.readyState === 1) agentWs.send(JSON.stringify(msg));
   }
 
   function sendToDashboard(msg: object): void {
-    if (terminalDashboard?.readyState === 1 /* OPEN */) {
-      terminalDashboard.send(JSON.stringify(msg));
-    }
+    if (terminalDashboard?.readyState === 1) terminalDashboard.send(JSON.stringify(msg));
   }
 
   terminalWss.on("connection", (socket: WebSocket) => {
@@ -308,55 +447,32 @@ export function createRelayServer(): RelayServer {
 
     socket.on("message", (raw: Buffer) => {
       let msg: Record<string, unknown>;
-      try {
-        msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
-      } catch {
-        return;
-      }
+      try { msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>; } catch { return; }
 
       if (!authed) {
-        if (msg["type"] !== "hello") {
-          socket.close(4001, "Send hello first");
-          return;
-        }
-
-        const token = typeof msg["token"] === "string" ? msg["token"] : "";
+        if (msg["type"] !== "hello") { socket.close(4001, "Send hello first"); return; }
+        const t = typeof msg["token"] === "string" ? msg["token"] : "";
         const kind = typeof msg["kind"] === "string" ? msg["kind"] : "daemon";
-
-        const authorized = authorizeRelayToken(tokens, token, kind === "pi" ? "pi" : "daemon");
+        const authorized = authorizeRelayToken(tokens, t, kind === "pi" ? "pi" : "daemon");
         if (!authorized) {
           socket.send(JSON.stringify({ type: "hello_error", message: "Invalid relay token" }));
           socket.close(4003, "Unauthorized");
           return;
         }
-
         if (kind === "pi") {
-          // Dashboard subscriber
           isDashboard = true;
-          if (terminalDashboard && terminalDashboard !== socket) {
-            terminalDashboard.close(4002, "Replaced by newer dashboard connection");
-          }
+          if (terminalDashboard && terminalDashboard !== socket) terminalDashboard.close(4002, "Replaced");
           terminalDashboard = socket;
           authed = true;
           socket.send(JSON.stringify({ type: "hello_ack" }));
-          // Notify about currently connected agents
-          for (const connectedAgentId of terminalAgents.keys()) {
-            socket.send(JSON.stringify({ type: "agent_connected", agentId: connectedAgentId }));
-          }
+          for (const id of terminalAgents.keys()) socket.send(JSON.stringify({ type: "agent_connected", agentId: id }));
           console.log("[TerminalRelay] Dashboard subscriber connected");
         } else {
-          // pi-agent terminal connection
-          const rawAgentId = typeof msg["agentId"] === "string" ? msg["agentId"] : "";
-          if (!rawAgentId) {
-            socket.send(JSON.stringify({ type: "hello_error", message: "Missing agentId" }));
-            socket.close(4001, "Missing agentId");
-            return;
-          }
-          agentId = rawAgentId;
+          const rawId = typeof msg["agentId"] === "string" ? msg["agentId"] : "";
+          if (!rawId) { socket.send(JSON.stringify({ type: "hello_error", message: "Missing agentId" })); socket.close(4001); return; }
+          agentId = rawId;
           const existing = terminalAgents.get(agentId);
-          if (existing && existing !== socket) {
-            existing.close(4002, "Replaced by newer agent connection");
-          }
+          if (existing && existing !== socket) existing.close(4002, "Replaced");
           terminalAgents.set(agentId, socket);
           authed = true;
           socket.send(JSON.stringify({ type: "hello_ack", agentId }));
@@ -367,17 +483,13 @@ export function createRelayServer(): RelayServer {
       }
 
       if (isDashboard) {
-        // Dashboard → agent: strip off agentId and route to matching agent
         const targetId = typeof msg["agentId"] === "string" ? msg["agentId"] : null;
         if (!targetId) return;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { agentId: _drop, ...payload } = msg as { agentId: string } & Record<string, unknown>;
         sendToAgent(targetId, payload);
       } else if (agentId) {
-        // Agent → dashboard: tag with agentId
-        if (msg["type"] === "ping") {
-          socket.send(JSON.stringify({ type: "pong" }));
-          return;
-        }
+        if (msg["type"] === "ping") { socket.send(JSON.stringify({ type: "pong" })); return; }
         sendToDashboard({ ...msg, agentId });
       }
     });
@@ -399,21 +511,7 @@ export function createRelayServer(): RelayServer {
     });
   });
 
-  httpServer.on("upgrade", (request, socket, head) => {
-    const pathname = new URL(request.url ?? "/", "ws://localhost").pathname;
-    if (pathname === "/ws") {
-      wss.handleUpgrade(request, socket, head, (ws: WebSocket) => {
-        wss.emit("connection", ws, request);
-      });
-    } else if (pathname === "/pi-agent-relay") {
-      terminalWss.handleUpgrade(request, socket, head, (ws: WebSocket) => {
-        terminalWss.emit("connection", ws, request);
-      });
-    } else {
-      socket.destroy();
-    }
-  });
-
+  // ── General relay WebSocket (/ws) ──────────────────────────────────────────
   wss.on("connection", (socket: WebSocket) => {
     const connectionId = randomUUID();
     let authenticated = false;
@@ -428,9 +526,7 @@ export function createRelayServer(): RelayServer {
 
     socket.on("message", (raw: Buffer) => {
       let envelope: RelayEnvelope;
-      try {
-        envelope = JSON.parse(raw.toString()) as RelayEnvelope;
-      } catch {
+      try { envelope = JSON.parse(raw.toString()) as RelayEnvelope; } catch {
         sendJson(socket, makeError("invalid_json", "Relay expected JSON messages."));
         return;
       }
@@ -442,20 +538,17 @@ export function createRelayServer(): RelayServer {
           sendJson(socket, makeError("unauthenticated", "Send a hello envelope first."));
           return;
         }
-
         const payload = envelope.payload as RelayHelloPayload | undefined;
         if (!payload?.peerId || !payload?.kind || !payload?.token) {
           sendJson(socket, makeError("invalid_hello", "Hello payload is missing required fields."));
           return;
         }
-
         const authorized = authorizeRelayToken(tokens, payload.token, payload.kind);
         if (!authorized) {
-          sendJson(socket, makeError("invalid_token", "Relay token is invalid for this peer kind."));
+          sendJson(socket, makeError("invalid_token", "Relay token is invalid."));
           socket.close(4001, "Invalid relay token");
           return;
         }
-
         const peer: RelayPeerRecord = {
           peerId: payload.peerId,
           kind: payload.kind,
@@ -464,18 +557,12 @@ export function createRelayServer(): RelayServer {
           lastSeenAt: timestamp,
           connectionId,
         };
-
         registry.attachPeer(connectionId, peer);
         authenticated = true;
-
         const ack: RelayEnvelope<RelayHelloAckPayload> = {
           type: "hello_ack",
           sentAt: timestamp,
-          payload: {
-            connectionId,
-            peer,
-            peers: registry.listPeers(),
-          },
+          payload: { connectionId, peer, peers: registry.listPeers() },
         };
         sendJson(socket, ack);
         return;
@@ -484,62 +571,38 @@ export function createRelayServer(): RelayServer {
       registry.touch(connectionId, timestamp);
 
       if (envelope.type === "heartbeat") {
-        sendJson(socket, {
-          type: "presence_sync",
-          sentAt: timestamp,
-          payload: {
-            peers: registry.listPeers(),
-          },
-        });
+        sendJson(socket, { type: "presence_sync", sentAt: timestamp, payload: { peers: registry.listPeers() } });
         return;
       }
 
-      const routed = registry.route({
-        ...envelope,
-        from: connection.peer?.peerId ?? envelope.from,
-        sentAt: envelope.sentAt ?? timestamp,
-      });
-
+      const routed = registry.route({ ...envelope, from: connection.peer?.peerId ?? envelope.from, sentAt: envelope.sentAt ?? timestamp });
       if (!routed) {
-        sendJson(
-          socket,
-          makeError(
-            "route_not_found",
-            envelope.to
-              ? `No relay peer is currently connected for target ${envelope.to}.`
-              : "Relay messages must include a target peer id in `to`.",
-          ),
-        );
+        sendJson(socket, makeError("route_not_found", envelope.to ? `No peer connected for ${envelope.to}.` : "Messages must include a target peer id."));
       }
     });
 
-    socket.on("close", () => {
-      registry.unregisterConnection(connectionId);
-    });
+    socket.on("close", () => registry.unregisterConnection(connectionId));
+    socket.on("error", () => registry.unregisterConnection(connectionId));
+  });
 
-    socket.on("error", () => {
-      registry.unregisterConnection(connectionId);
-    });
+  httpServer.on("upgrade", (request, socket, head) => {
+    const pathname = new URL(request.url ?? "/", "ws://localhost").pathname;
+    if (pathname === "/ws") {
+      wss.handleUpgrade(request, socket, head, (ws: WebSocket) => wss.emit("connection", ws, request));
+    } else if (pathname === "/pi-agent-relay") {
+      terminalWss.handleUpgrade(request, socket, head, (ws: WebSocket) => terminalWss.emit("connection", ws, request));
+    } else {
+      socket.destroy();
+    }
   });
 
   return {
     httpServer,
     shutdown: async () => {
-      for (const client of wss.clients) {
-        client.close(1001, "Relay shutting down");
-      }
-      for (const client of terminalWss.clients) {
-        client.close(1001, "Relay shutting down");
-      }
-
+      for (const client of wss.clients) client.close(1001, "Relay shutting down");
+      for (const client of terminalWss.clients) client.close(1001, "Relay shutting down");
       await new Promise<void>((resolve, reject) => {
-        httpServer.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
+        httpServer.close((error) => { if (error) reject(error); else resolve(); });
       });
     },
   };

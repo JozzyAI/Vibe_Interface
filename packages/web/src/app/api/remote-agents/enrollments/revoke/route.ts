@@ -1,11 +1,12 @@
 import { type NextRequest } from "next/server";
 import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
-import { revokeRemoteEnrollment } from "@/lib/remote-agents";
+import { getRemoteAgentsBackend } from "@/lib/backend";
 
 export async function POST(request: NextRequest) {
   const correlationId = getCorrelationId(request);
   try {
     const body = (await request.json()) as { enrollmentId: string };
+    const { revokeRemoteEnrollment } = await getRemoteAgentsBackend();
     const enrollment = await revokeRemoteEnrollment(body);
     return jsonWithCorrelation({ enrollment }, { status: 200 }, correlationId);
   } catch (error) {

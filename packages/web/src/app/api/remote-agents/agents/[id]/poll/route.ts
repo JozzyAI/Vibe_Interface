@@ -1,5 +1,6 @@
 import { type NextRequest } from "next/server";
 import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
+// Daemon route — pi-agent calls relay directly in cloud mode; this stays local-only.
 import { pollRemoteAgent } from "@/lib/remote-agents";
 
 const STALE_POLL_AGENT_CACHE_MS = 60_000;

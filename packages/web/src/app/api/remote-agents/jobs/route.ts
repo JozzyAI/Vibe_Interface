@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
-import { createRemoteAgentJob } from "@/lib/remote-agents";
+import { getRemoteAgentsBackend } from "@/lib/backend";
 import { dispatchRelayJob } from "@/lib/relay-dispatch";
 
 type RemoteProvider = "codex" | "claude";
@@ -105,6 +105,7 @@ export async function POST(request: NextRequest) {
         : body.provider === "claude"
           ? "Start Claude Code via bridge"
           : undefined);
+    const { createRemoteAgentJob } = await getRemoteAgentsBackend();
     const job = await createRemoteAgentJob({
       agentId: body.agentId,
       title,

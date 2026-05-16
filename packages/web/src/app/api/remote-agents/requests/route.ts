@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
-import { createRemoteApprovalRequest } from "@/lib/remote-agents";
+import { getRemoteAgentsBackend } from "@/lib/backend";
 
 export async function POST(request: NextRequest) {
   const correlationId = getCorrelationId(request);
@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
         | "generic";
       primaryAction?: "approve" | "reply";
     };
+    const { createRemoteApprovalRequest } = await getRemoteAgentsBackend();
     const approvalRequest = await createRemoteApprovalRequest(body);
     return jsonWithCorrelation({ approvalRequest }, { status: 200 }, correlationId);
   } catch (error) {

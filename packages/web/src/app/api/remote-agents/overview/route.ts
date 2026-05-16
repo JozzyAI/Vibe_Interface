@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
-import { getRemoteApprovalOverview } from "@/lib/remote-agents";
+import { getRemoteAgentsBackend } from "@/lib/backend";
 import type { RemoteApprovalOverview } from "@/lib/types";
 
 const OVERVIEW_CACHE_MS = 500;
@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
   const correlationId = getCorrelationId(request);
   try {
     const now = Date.now();
+    const { getRemoteApprovalOverview } = await getRemoteAgentsBackend();
     const overview =
       cachedOverview && cachedOverview.expiresAt > now
         ? cachedOverview.value

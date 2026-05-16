@@ -1,6 +1,8 @@
 import { type NextRequest } from "next/server";
 import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
+// Daemon route — pi-agent calls relay directly in cloud mode; this stays local-only.
 import { reportRemoteAgentJob } from "@/lib/remote-agents";
+import type { RemoteProviderState } from "@/lib/types";
 
 const STALE_REPORT_CACHE_MS = 60_000;
 const REPORT_DEDUPE_CACHE_MS = 2_000;
@@ -74,7 +76,7 @@ export async function POST(request: NextRequest) {
       tmuxSession?: string;
       logFile?: string;
       logTail?: string;
-      providerState?: Awaited<ReturnType<typeof reportRemoteAgentJob>>["providerState"];
+      providerState?: RemoteProviderState;
       artifactsDir?: string;
       handoffTitle?: string;
       progress?: string;
