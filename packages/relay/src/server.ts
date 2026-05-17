@@ -278,13 +278,13 @@ export function createRelayServer(): RelayServer {
         // create enrollment
         if (pathname === "/v1/pi/enrollments" && req.method === "POST") {
           const body = await readJsonBody(req) as Record<string, unknown>;
-          const enrollment = store.createEnrollment({
+          const result = store.createEnrollmentWithPairCommand({
             displayName: String(body["displayName"] ?? ""),
             projectLabel: String(body["projectLabel"] ?? ""),
             toolType: typeof body["toolType"] === "string" ? body["toolType"] : undefined,
             expiresInMinutes: typeof body["expiresInMinutes"] === "number" ? body["expiresInMinutes"] : 60,
           });
-          jsonResponse(res, 200, { enrollment });
+          jsonResponse(res, 200, result);
           return;
         }
 

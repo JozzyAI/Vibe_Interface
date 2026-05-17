@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["@pi/core"],
+  turbopack: {
+    resolveAlias: {
+      "@pi/core": "../core/dist/index.js",
+    },
+  },
   async headers() {
     return [
       {

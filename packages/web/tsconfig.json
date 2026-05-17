@@ -12,7 +12,7 @@
     "baseUrl": "src",
     "paths": {
       "@/*": ["./*"],
-      "@pi/core": ["../core/src/index.ts"]
+      "@pi/core": ["../core/dist/index"]
     },
     "allowJs": true,
     "incremental": true,

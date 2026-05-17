@@ -66,9 +66,14 @@ export async function getEnrollments() {
 
 export async function createRemoteEnrollment(input: {
   displayName: string; projectLabel: string; toolType?: string; expiresInMinutes?: number;
-}): Promise<RemoteEnrollmentSummary> {
-  const result = await piPost<{ enrollment: RemoteEnrollmentSummary }>("/v1/pi/enrollments", input);
-  return result.enrollment;
+}): Promise<RemoteEnrollmentSummary & { pairCommand?: string; advancedCommand?: string; relayUrl?: string }> {
+  const result = await piPost<{
+    enrollment: RemoteEnrollmentSummary;
+    pairCommand?: string;
+    advancedCommand?: string;
+    relayUrl?: string;
+  }>("/v1/pi/enrollments", input);
+  return { ...result.enrollment, pairCommand: result.pairCommand, advancedCommand: result.advancedCommand, relayUrl: result.relayUrl };
 }
 
 export async function consumeRemoteEnrollment(input: { code: string }): Promise<{

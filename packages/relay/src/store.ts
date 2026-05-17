@@ -813,6 +813,44 @@ export function listRecentEnrollments(limit = 12) {
   return rows.map(serializeEnrollment);
 }
 
+function normalizeRelayTerminalWsUrl(relayUrl: string): string {
+  // Strip /ws or /pi-agent-relay suffix, then append /pi-agent-relay
+  const base = relayUrl
+    .replace(/\/pi-agent-relay$/, "")
+    .replace(/\/ws$/, "")
+    .replace(/\/$/, "");
+  // Convert http(s) → ws(s) if needed
+  const ws = base.startsWith("http://") ? "ws://" + base.slice(7)
+    : base.startsWith("https://") ? "wss://" + base.slice(8)
+    : base;
+  return `${ws}/pi-agent-relay`;
+}
+
+function buildPairCommands(enrollment: ReturnType<typeof serializeEnrollment>) {
+  const relayPublicUrl = deriveRelayPublicHttpUrl();
+
+  // If relay env vars are not set, generate a clear config-error placeholder rather
+  // than silently producing a pair command pointing at localhost:3000.
+  const serverOrigin = relayPublicUrl ?? null;
+  if (!serverOrigin) {
+    const errCmd = "# ERROR: PI_RELAY_BASE_URL (or PI_RELAY_PUBLIC_WS_URL) not set on relay — cannot generate pair command";
+    return { pairCommand: errCmd, advancedCommand: errCmd, relayUrl: enrollment.relayUrl ?? "" };
+  }
+
+  const pairCommand = `pi-agent pair --server ${serverOrigin} --code ${enrollment.code} --start`;
+  const advancedCommand = enrollment.relayUrl
+    ? `PI_TERMINAL_RELAY_URL=${normalizeRelayTerminalWsUrl(enrollment.relayUrl)} \\\n  ${pairCommand}`
+    : pairCommand;
+  return { pairCommand, advancedCommand, relayUrl: enrollment.relayUrl ?? "" };
+}
+
+export function createEnrollmentWithPairCommand(input: {
+  displayName: string; projectLabel: string; toolType?: string; expiresInMinutes?: number;
+}) {
+  const enrollment = createEnrollment(input);
+  return { enrollment, ...buildPairCommands(enrollment) };
+}
+
 export function createReconnectEnrollment(agentId: string) {
   const db = getDb();
   const agent = db.prepare("SELECT * FROM agents WHERE agent_id = ?").get(agentId) as AgentRow | undefined;
@@ -825,19 +863,7 @@ export function createReconnectEnrollment(agentId: string) {
     expiresInMinutes: 60,
   });
 
-  const relayPublicUrl = deriveRelayPublicHttpUrl();
-  const serverOrigin = relayPublicUrl ?? "http://localhost:3000";
-  const pairCommand = `pi-agent pair --server ${serverOrigin} --code ${enrollment.code} --start`;
-  const advancedCommand = enrollment.relayUrl
-    ? `PI_TERMINAL_RELAY_URL=${enrollment.relayUrl.replace(/\/ws$/, "")}/pi-agent-relay \\\n  ${pairCommand}`
-    : pairCommand;
-
-  return {
-    enrollment,
-    pairCommand,
-    advancedCommand,
-    relayUrl: enrollment.relayUrl ?? "",
-  };
+  return { enrollment, ...buildPairCommands(enrollment) };
 }
 
 // ── Agent management ──────────────────────────────────────────────────────────

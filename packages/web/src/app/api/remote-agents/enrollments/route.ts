@@ -12,8 +12,9 @@ export async function POST(request: NextRequest) {
       expiresInMinutes?: number;
     };
     const { createRemoteEnrollment } = await getRemoteAgentsBackend();
-    const enrollment = await createRemoteEnrollment(body);
-    return jsonWithCorrelation({ enrollment }, { status: 200 }, correlationId);
+    const result = await createRemoteEnrollment(body);
+    const { pairCommand, advancedCommand, relayUrl, ...enrollment } = result as typeof result & { pairCommand?: string; advancedCommand?: string; relayUrl?: string };
+    return jsonWithCorrelation({ enrollment, pairCommand, advancedCommand, relayUrl }, { status: 200 }, correlationId);
   } catch (error) {
     return jsonWithCorrelation(
       { error: error instanceof Error ? error.message : "Failed to create enrollment code" },

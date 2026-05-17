@@ -140,6 +140,7 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
   const [latestEnrollment, setLatestEnrollment] = useState<RemoteEnrollmentSummary | null>(
     initialRemoteOverview.enrollments[0] ?? null,
   );
+  const [latestPairCommand, setLatestPairCommand] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [browserOrigin, setBrowserOrigin] = useState("http://localhost:3000");
@@ -187,7 +188,7 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
         try {
           setError(null);
           setCopied(false);
-          const created = await requestJson<{ enrollment: RemoteEnrollmentSummary }>(
+          const created = await requestJson<{ enrollment: RemoteEnrollmentSummary; pairCommand?: string; advancedCommand?: string; relayUrl?: string }>(
             "/api/remote-agents/enrollments",
             {
               method: "POST",
@@ -195,6 +196,7 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
             },
           );
           setLatestEnrollment(created.enrollment);
+          setLatestPairCommand(created.pairCommand ?? null);
           await refreshOverview();
         } catch (nextError) {
           setError(nextError instanceof Error ? nextError.message : "Failed to create code");
@@ -202,7 +204,9 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
       })();
     });
 
-  const command = pairingCommand(latestEnrollment);
+  // Cloud mode: relay returns pairCommand pointing at relay URL.
+  // Local mode: derive from PI_SERVER_ORIGIN (LAN IP).
+  const command = latestPairCommand ?? pairingCommand(latestEnrollment);
 
   const copyCommand = () =>
     startTransition(() => {

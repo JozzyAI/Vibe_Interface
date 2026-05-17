@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently \"npm:dev:next\" \"npm:dev:direct-terminal\"",
     "dev:next": "next dev --turbopack",
-    "dev:direct-terminal": "tsx watch server/direct-terminal-ws.ts",
+    "dev:direct-terminal": "node --env-file=.env.local --import tsx/esm --watch server/direct-terminal-ws.ts",
     "build": "next build && tsc -p tsconfig.server.json",
     "start": "node dist-server/start-all.js",
     "typecheck": "tsc --noEmit"
