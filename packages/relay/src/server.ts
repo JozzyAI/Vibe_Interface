@@ -52,10 +52,18 @@ function extractBearerToken(authorization: string | undefined): string | null {
   return token.trim();
 }
 
+const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MB
+
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
+  let totalBytes = 0;
   for await (const chunk of req) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+    totalBytes += buf.byteLength;
+    if (totalBytes > MAX_BODY_BYTES) {
+      throw new Error("Request body too large");
+    }
+    chunks.push(buf);
   }
   const raw = Buffer.concat(chunks).toString("utf8");
   return raw ? (JSON.parse(raw) as unknown) : {};
@@ -83,19 +91,19 @@ export function createRelayServer(): RelayServer {
     const url = new URL(req.url ?? "/", "http://localhost");
     const { pathname } = url;
 
-    // ── Health / presence ──────────────────────────────────────────────────
+    // ── Health (public, minimal info) ─────────────────────────────────────
     if (pathname === "/health") {
-      const db2 = getDb();
-      const agentCount = (db2.prepare("SELECT COUNT(*) AS cnt FROM agents").get() as { cnt: number }).cnt;
-      jsonResponse(res, 200, {
-        status: "ok",
-        peers: registry.listPeers().length,
-        dbAgents: agentCount,
-      });
+      jsonResponse(res, 200, { status: "ok" });
       return;
     }
 
+    // ── Presence (authenticated — pi token required) ───────────────────────
     if (pathname === "/presence") {
+      const token = extractBearerToken(req.headers.authorization);
+      if (!token || !authorizeRelayToken(tokens, token, "pi")) {
+        jsonResponse(res, 401, httpError("unauthorized", "Missing or invalid PI token."));
+        return;
+      }
       jsonResponse(res, 200, { peers: registry.listPeers() });
       return;
     }
