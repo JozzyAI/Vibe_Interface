@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
-import { requestRemoteAgentDaemonRestart } from "@/lib/remote-agents";
+import { getRemoteAgentsBackend } from "@/lib/backend";
 
 export async function POST(
   request: NextRequest,
@@ -9,6 +9,7 @@ export async function POST(
   const correlationId = getCorrelationId(request);
   try {
     const { id } = await props.params;
+    const { requestRemoteAgentDaemonRestart } = await getRemoteAgentsBackend();
     const result = await requestRemoteAgentDaemonRestart(id);
     return jsonWithCorrelation(result, { status: 200 }, correlationId);
   } catch (error) {
