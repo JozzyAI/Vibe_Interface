@@ -1,9 +1,9 @@
 # PI Project Handoff
 
-**Date:** 2026-05-15  
+**Date:** 2026-05-18  
 **Repo:** `JozzyAI/Project_Interface`  
 **Branch:** `main`  
-**Last commit:** `63fd35d feat: add relay-backed cloud control plane`
+**Phase 1 status: COMPLETE — Fly relay live, E2E verified, tokens rotated**
 
 This document is a complete handoff for another agent or developer to continue without needing the full chat history.
 
@@ -74,6 +74,8 @@ terminal  ──→  PI Relay (/pi-agent-relay)  ←──  dashboard relay subs
 
 | Commit | Change |
 |--------|--------|
+| `48b39f7` | **Dockerfile fix** — builder installs python3/make/g++ and runs `npm install` (no `--ignore-scripts`) so better-sqlite3 native addon compiles; runner copies node_modules from builder |
+| `7a373cd` | **Fly.io deployment** — relay live at `https://pi-relay-jozzy.fly.dev`; `fly.toml` with `auto_stop_machines=true`, shared-cpu-1x 256 MB, 1 GB volume in `sin`; no dedicated IPv4; cost-minimised |
 | `63fd35d` | **Relay-backed cloud control plane** — SQLite DB in `packages/relay`, `/v1/daemon/*` and `/v1/pi/*` routes, dashboard backend switch, enrollment consume compat alias |
 | `aa62bd1` | Relay terminal proxy (`/pi-agent-relay` on relay server), `RelayTerminalSubscriber` in dashboard, Dockerfile + fly.toml |
 | `e263590` | Token-based auth — `PI_ACCESS_TOKEN` middleware, login page at `/login`, session cookie, logout button |
@@ -155,12 +157,22 @@ Claude Code / Codex process
 
 ## 5. Current Known-Good Behavior
 
-- **Local mode:** overview, heartbeat, poll, job creation, approval flow all work end-to-end
-- **Cloud relay routes:** smoke-tested locally — register, heartbeat, poll, enrollment create + consume alias, overview all pass
+### Phase 1 E2E verified (2026-05-18) — public Fly relay + token rotation
+
+- **Fly relay live:** `https://pi-relay-jozzy.fly.dev` — `/health` → `{"status":"ok"}`, HTTPS + HTTP→HTTPS redirect, 1/1 health checks passing
+- **Auth:** no token → 401, old (rotated-away) token → 401, new pi token → 200 on `/presence`
+- **Dashboard cloud mode:** `PI_RELAY_BASE_URL` + `PI_RELAY_PI_TOKEN` set in `.env.local`; overview `generatedAt` field confirms relay SQLite as source of truth
+- **Enrollment pair command:** correctly uses `https://pi-relay-jozzy.fly.dev --server` in cloud mode
+- **pi-agent pairing:** `pair → start-daemon` connects to `wss://pi-relay-jozzy.fly.dev/pi-agent-relay`; `terminal_relay_connected` confirmed
+- **Agent online:** status `running`, visible in dashboard overview from relay
+- **Claude session:** job dispatched via relay (`relayDispatch.delivered: true`), pi-agent starts tmux session
+- **Browser terminal echo:** `/mux` WebSocket → `RelayTerminalSubscriber` → Fly relay → pi-agent → tmux → back; `echo hello` received through full chain
+- **Token rotation:** old daemon/pi tokens replaced without code changes; existing agents must re-pair after rotation
+- **Local mode:** overview, heartbeat, poll, job creation, approval flow all work end-to-end (unchanged)
 - **pi-agent pairing compat:** `POST /api/remote-agents/enrollments/consume` no-auth alias confirmed working on relay
 - **Provider-agnostic machines:** `tool_type` is nullable on agents, never used for routing; `provider` lives on jobs
-- **Claude default model:** `PI_CLAUDE_DEFAULT_MODEL` env var is respected when launching Claude Code sessions; shell aliases are never relied on (subprocess doesn't expand them)
-- **Terminal selection:** works because `tmux mouse` is set to `off` for PI sessions — xterm.js drag events reach the selection engine
+- **Claude default model:** `PI_CLAUDE_DEFAULT_MODEL` env var is respected when launching Claude Code sessions
+- **Terminal selection:** drag-select persists after mouseup; `Ctrl+C` copies (not SIGINT) when selection active
 - **Terminal UTF-8:** `StringDecoder` streaming decoder prevents mojibake at PTY read boundaries
 - **Auth:** `PI_ACCESS_TOKEN` middleware protects all routes except daemon API and login page
 - **Light theme:** `defaultTheme="light"` globally; terminal section stays dark intentionally
@@ -171,13 +183,13 @@ Claude Code / Codex process
 
 | Issue | Severity | Notes |
 |-------|----------|-------|
-| **E2EE not implemented** | Medium | Payload fields are stored opaque — schema is ready. Needs key exchange design. |
+| **E2EE not implemented** | Medium | Payload fields are stored opaque — schema is ready. Needs key exchange design. Not in scope for Phase 2. |
 | **No real login/accounts** | Medium | `PI_ACCESS_TOKEN` is a single shared token. Fine for personal use; must replace before multi-user. |
 | **SQLite single-instance** | Low | Acceptable for MVP. WAL mode handles concurrency. Future: Postgres (only `db.ts` + `store.ts` change). |
+| **No relay mode indicator in UI** | Low | Dashboard doesn't show whether it's in Local or Cloud mode. User must infer from config. Next: add mode badge to header. |
 | **Auto-resume in relay is basic** | Low | Port of core auto-resume logic done. Edge cases (exact retry-at parsing, Ralph mode continuation) are simplified vs dashboard version. Test with real Claude usage-limit sessions. |
-| **Cloud mode needs real deployment** | High | Only smoke-tested with local relay. Full end-to-end test (pi-agent on remote machine → public relay → dashboard) not yet done. |
-| **Terminal on cloud relay untested** | Medium | `RelayTerminalSubscriber` + relay `/pi-agent-relay` proxying not yet tested with a real remote pi-agent. |
 | **Restart/continue job** | Low | Relay's `restartJob()` is a simplified version — creates a new queued job. Full Codex session resume logic (find matching session in history) is only in local `restartRemoteCodexJob()`. |
+| **No enrollment rate limit** | Low | `/api/remote-agents/enrollments/consume` (no-auth alias) has no rate limit. Low risk for personal use. Add before broader deployment. |
 | **Do not add `tool_type` routing** | Critical | Machine identity must stay provider-agnostic. `tool_type` is legacy/opaque only. Adding provider logic to agents would break the architecture. |
 
 ---
@@ -332,20 +344,26 @@ If selection disappears on mouseup: check that `tmux set-option mouse off` is ap
 
 ## 10. Next Recommended Work
 
-### Immediate (before broader use)
-1. **Deploy relay to a public host** (Fly.io preferred — `fly.toml` is already set up). Create the persistent volume before first deploy.
-2. **End-to-end cloud mode test** — real pi-agent on a remote machine → public relay → dashboard. Terminal stream, approval flow, job lifecycle.
-3. **Fix pair command generation in cloud mode** — `remote-agents.ts` `createReconnectEnrollment()` generates pair commands pointing to `PI_PUBLIC_URL`. In cloud mode, this should point to the relay URL instead. Currently dashboard in cloud mode generates locally-stored enrollments but pair command may use wrong server origin.
+### Phase 2: Cloud Mode Stabilization (current focus)
 
-### Short-term
-4. **Real account/login system** — replace `PI_ACCESS_TOKEN` with GitHub OAuth or invite-based accounts (see `ROADMAP.md`). NextAuth.js is the recommended path.
-5. **Move auto-resume business logic to relay** — currently ported as a simplified version. Full logic (usage-limit time parsing, Ralph mode iterations, Codex session history matching for restart) should eventually live in `store.ts` for cloud-mode completeness.
-6. **Mobile-optimized dashboard** — current UI is web-responsive but not mobile-native. Expo app is the long-term target.
+1. **Mode indicator in dashboard header** — show Local/Cloud badge + relay URL + connection status. User should not need to read `.env.local` to know which mode is active.
+2. **Machine lifecycle hardening** — Reconnect / Forget / Remove / Restart daemon flows should be stable and tested in cloud mode. Currently working but not stress-tested.
+3. **Session lifecycle dropdown** — Resume / Archive / Delete menu on session cards. Archive and delete work; resume needs better UX for cloud mode (agent may be sleeping).
+4. **Cloud relay ops docs** — token rotation runbook, re-pair procedure, volume backup, troubleshooting guide. See `docs/cloud-control-plane.md`.
+5. **Basic rate limit on enrollment consume** — `/api/remote-agents/enrollments/consume` (no-auth alias) should have IP-based rate limiting before broader deployment.
 
-### Long-term
-7. **E2EE layer** — Phase 2. Dashboard generates session keypair on pairing; all terminal frames and approval payloads encrypted before leaving the client. Relay routes ciphertext only. DB schema already has opaque payload fields — add `payload_encrypted`, `key_id`, `nonce`, `encryption_version` columns via non-destructive `ALTER TABLE ADD COLUMN`.
-8. **Postgres migration** — only `packages/relay/src/db.ts` and the query layer in `store.ts` need updating. API surface unchanged.
-9. **Push notifications** — mobile push for approval requests and session state changes.
+### Phase 3: Multi-user / Accounts (not yet)
+- Replace `PI_ACCESS_TOKEN` with GitHub OAuth or invite-based accounts. NextAuth.js is the recommended path.
+- Do not start this until Phase 2 stabilization is complete.
+
+### Phase 4: E2EE (long-term)
+- Dashboard generates session keypair on pairing; all terminal frames and approval payloads encrypted before leaving the client. Relay routes ciphertext only.
+- DB schema already has opaque payload fields. Add `payload_encrypted`, `key_id`, `nonce`, `encryption_version` columns via non-destructive `ALTER TABLE ADD COLUMN`.
+
+### Other long-term
+- **Postgres migration** — only `db.ts` + `store.ts` need updating. API surface unchanged.
+- **Push notifications** — mobile push for approval requests and session state changes.
+- **Mobile-optimized dashboard** — current UI is web-responsive but not mobile-native. Expo app is the long-term target.
 
 ---
 
@@ -353,14 +371,18 @@ If selection disappears on mouseup: check that `tmux set-option mouse off` is ap
 
 | Warning | Why |
 |---------|-----|
+| **Do not commit `.env.local`** | Contains live relay tokens. It is gitignored — keep it that way. Never stage or force-add it. |
+| **Do not print, paste, or log relay tokens** | Tokens in chat, terminal output, logs, or git diffs are considered exposed and must be rotated immediately. |
+| **Do not use placeholder/example tokens in production** | Tokens like `daemon-abc123` or `pi-xyz789` are public in docs — anyone can try them. Always generate with `openssl rand -hex 32`. |
+| **After rotating tokens, re-pair all pi-agents** | The daemon token is stored in the pi-agent state file at pairing time. Old agents will receive 401 on heartbeat after rotation. They are not auto-updated. |
+| **Do not deploy relay without a persistent volume on Fly.io** | Fly's filesystem is ephemeral. The SQLite DB is wiped on every deploy without a mounted volume. Always create `pi_relay_data` before first deploy. Run `fly volumes list` to confirm before deploying. |
 | **Do not make the relay call back to a local LAN dashboard URL** | `PI_RELAY_PI_BASE_URL` was the old anti-pattern and has been removed. Relay owns DB state in cloud mode. |
 | **Do not make machine identity provider-specific** | `tool_type` on agents is legacy/opaque. Provider lives on `jobs.provider`. Adding provider routing to agents breaks multi-provider agents. |
 | **Do not use bash shell aliases for Claude model selection** | `subprocess.Popen` does not expand shell aliases. Always use `PI_CLAUDE_DEFAULT_MODEL` env var or explicit `--model` flag. |
-| **Do not enable `tmux mouse on` for PI terminal sessions** | With mouse mode on, xterm.js drag events route to the PTY instead of the selection engine — text selection disappears on mouseup. Keep `mouse off` unless the xterm.js selection UX is completely redesigned. |
-| **Do not stage `dist/`, `.next/`, `*.db`, `node_modules/`** | Never commit generated or runtime artifacts. |
+| **Do not enable `tmux mouse on` for PI terminal sessions** | With mouse mode on, xterm.js drag events route to the PTY instead of the selection engine — text selection disappears on mouseup. |
+| **Do not stage `dist/`, `.next/`, `*.db`, `*.db-wal`, `*.db-shm`, `node_modules/`** | Never commit generated or runtime artifacts. |
 | **Do not push without `PI_RELAY_PI_BASE_URL` confirmed removed** | Grep for it before any relay-related PR. It must appear only in docs as a deprecation notice. |
 | **Do not use Claude `PreToolUse` hooks as blocking approval gates by default** | Causes agent deadlock if the hook script exits non-zero. Use the pi-agent approval request flow instead. |
-| **Do not deploy relay without a persistent volume on Fly.io** | Fly's filesystem is ephemeral. The SQLite DB is wiped on every deploy without a mounted volume. Always create `pi_relay_data` before first deploy. |
 
 ---
 

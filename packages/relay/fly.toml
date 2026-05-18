@@ -1,4 +1,4 @@
-app            = "pi-relay"
+app            = "pi-relay-jozzy"
 primary_region = "sin"
 
 [build]

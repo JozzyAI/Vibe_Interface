@@ -2,6 +2,19 @@
 
 PI supports two operating modes. Both use the same dashboard UI and the same pi-agent binary — only the environment variables differ.
 
+## Live deployment
+
+| Item | Value |
+|------|-------|
+| Relay URL | `https://pi-relay-jozzy.fly.dev` |
+| Fly app | `pi-relay-jozzy` |
+| Region | `sin` |
+| VM | shared-cpu-1x, 256 MB |
+| Volume | `pi_relay_data`, 1 GB, encrypted |
+| Last E2E verified | 2026-05-18 |
+
+**E2E verified:** health ✓, auth (old token 401, new token 200) ✓, dashboard cloud mode ✓, enrollment pair command ✓, pi-agent connect ✓, Claude session ✓, browser terminal echo ✓.
+
 ---
 
 ## Mode 1: Local / Same-Wi-Fi (default)
@@ -37,44 +50,45 @@ browser   ──→  dashboard (local)   ──→  PI Relay API
 terminal  ──→  PI Relay /pi-agent-relay  ←──  dashboard
 ```
 
-### Deploy the relay (Fly.io)
+### First-time deploy (Fly.io)
+
+> **Volume is required.** Without it the SQLite DB is wiped on every deploy. Create the volume first, then deploy — never in the other order.
 
 ```bash
 cd packages/relay
 
-# 1. Create a persistent volume BEFORE first deploy
-fly volumes create pi_relay_data --size 1 --region sin
+# 1. Create persistent volume BEFORE first deploy
+fly volumes create pi_relay_data --size 1 --region sin --app pi-relay-jozzy
 
-# 2. Deploy
-fly launch --name pi-relay --region sin
-# or on subsequent deploys:
-fly deploy
+# 2. Deploy (no HA, cost-minimised)
+fly deploy --ha=false --app pi-relay-jozzy
 
-# 3. Set secrets
+# 3. Set secrets (generate real tokens — do NOT use these placeholders)
+#    Generate: openssl rand -hex 32  (run twice)
 fly secrets set \
-  PI_RELAY_TOKENS="daemon-abc123:daemon,pi-xyz789:pi" \
-  PI_RELAY_OWNER_TOKEN="your-dashboard-bearer-token"
+  PI_RELAY_TOKENS="<DAEMON_TOKEN>:daemon:local-daemon,<PI_TOKEN>:pi:local-pi" \
+  PI_RELAY_OWNER_TOKEN="<PI_TOKEN>" \
+  PI_RELAY_PUBLIC_WS_URL="wss://pi-relay-jozzy.fly.dev" \
+  --app pi-relay-jozzy
 ```
 
-> **Warning:** Without the volume, the SQLite database lives on Fly's ephemeral filesystem and is wiped on every deploy. Always create `pi_relay_data` before the first deploy.
-
-**Optional env overrides** (set via `fly secrets set` or `[env]` in fly.toml):
-```
-PI_RELAY_DB_PATH=/data/pi-relay.db   # default
-PI_RELAY_PORT=8787                   # default
-PI_RELAY_HOST=0.0.0.0               # default
+**Verify deploy:**
+```bash
+curl https://pi-relay-jozzy.fly.dev/health        # → {"status":"ok"}
+curl -s -o /dev/null -w "%{http_code}" https://pi-relay-jozzy.fly.dev/presence  # → 401
 ```
 
 ### Configure the dashboard (cloud mode)
 
 ```bash
-# packages/web/.env.local
-PI_ACCESS_TOKEN=your-dashboard-password
-PI_RELAY_BASE_URL=https://pi-relay.fly.dev
-PI_RELAY_PI_TOKEN=pi-xyz789
-PI_RELAY_DAEMON_TOKEN=daemon-abc123
-PI_RELAY_PUBLIC_WS_URL=wss://pi-relay.fly.dev
+# packages/web/.env.local  — DO NOT COMMIT THIS FILE
+PI_RELAY_BASE_URL=https://pi-relay-jozzy.fly.dev
+PI_RELAY_PI_TOKEN=<redacted>
+PI_RELAY_DAEMON_TOKEN=<redacted>
+PI_RELAY_PUBLIC_WS_URL=wss://pi-relay-jozzy.fly.dev
 ```
+
+`.env.local` is gitignored. Never stage or force-add it. Never paste real token values in chat, logs, or code review.
 
 When `PI_RELAY_BASE_URL` + `PI_RELAY_PI_TOKEN` are both set, the dashboard automatically uses the relay as its backend. Local mode is the fallback when either is missing.
 
@@ -83,10 +97,54 @@ When `PI_RELAY_BASE_URL` + `PI_RELAY_PI_TOKEN` are both set, the dashboard autom
 The dashboard generates relay-aware pair commands automatically. In cloud mode the pair command uses the relay URL:
 
 ```
-pi-agent pair --server https://pi-relay.fly.dev --code XXXX --start
+pi-agent pair --server https://pi-relay-jozzy.fly.dev --code XXXX --start
 ```
 
 pi-agent stores the relay URL and token in its state file after pairing. All subsequent heartbeats and reports go to the relay directly — the dashboard is not in the loop for those.
+
+---
+
+## Token rotation
+
+Rotate tokens when: a token is accidentally exposed (printed in terminal, pasted in chat, appears in a git diff or log).
+
+**Steps:**
+
+1. Generate new tokens locally — do not paste them here:
+   ```bash
+   openssl rand -hex 32   # → NEW_DAEMON_TOKEN
+   openssl rand -hex 32   # → NEW_PI_TOKEN
+   ```
+
+2. Set new Fly secrets (you run this with real values):
+   ```bash
+   fly secrets set \
+     PI_RELAY_TOKENS="<NEW_DAEMON_TOKEN>:daemon:local-daemon,<NEW_PI_TOKEN>:pi:local-pi" \
+     PI_RELAY_OWNER_TOKEN="<NEW_PI_TOKEN>" \
+     PI_RELAY_PUBLIC_WS_URL="wss://pi-relay-jozzy.fly.dev" \
+     --app pi-relay-jozzy
+   ```
+   Fly triggers an automatic redeploy. Wait for it to complete.
+
+3. Update `packages/web/.env.local`:
+   ```
+   PI_RELAY_PI_TOKEN=<NEW_PI_TOKEN>
+   PI_RELAY_DAEMON_TOKEN=<NEW_DAEMON_TOKEN>
+   ```
+
+4. Restart the dashboard dev server.
+
+5. Re-pair all pi-agents — the daemon token in each agent's state file is now invalid:
+   ```bash
+   # In dashboard: create a new enrollment, copy the pair command
+   pi-agent pair --server https://pi-relay-jozzy.fly.dev --code XXXX --start
+   ```
+
+6. Verify (status codes only — no token values):
+   - Old token → 401
+   - New token → 200
+   - Overview reads from relay (`generatedAt` field present)
+   - New enrollment pair command uses Fly URL
 
 ---
 
