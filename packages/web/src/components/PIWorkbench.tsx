@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { ModeIndicator } from "@/components/ModeIndicator";
 import type {
   DashboardSession,
   PIIdeaBoardData,
@@ -374,6 +375,10 @@ export function PIWorkbench({
           <Link href="/approval-hub" className="hover:no-underline" title="Approvals">♢</Link>
           <Link href="/ideas" className="hover:no-underline" title="Ideas">☾</Link>
           <span title="Activity">⌁</span>
+        </div>
+
+        <div className="border-t border-[#ececea]">
+          <ModeIndicator />
         </div>
       </aside>
 

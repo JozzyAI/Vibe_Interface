@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import type { ProjectInfo } from "@/lib/project-name";
+import { ModeIndicator } from "@/components/ModeIndicator";
 
 type ActiveArea = "home" | "sessions" | "tasks" | "agents" | "drafts" | "approvals";
 
@@ -168,8 +169,11 @@ export function PIWorkspaceShell({
           )}
         </div>
 
-        <div className="flex h-14 items-center border-t border-[#ececea] px-5 text-[12px] text-[#9aa1ad]">
-          {sidebarFooter ?? `${connectedCount} machine${connectedCount === 1 ? "" : "s"} online`}
+        <div className="border-t border-[#ececea]">
+          <div className="flex h-10 items-center px-5 text-[12px] text-[#9aa1ad]">
+            {sidebarFooter ?? `${connectedCount} machine${connectedCount === 1 ? "" : "s"} online`}
+          </div>
+          <ModeIndicator />
         </div>
       </aside>
 
