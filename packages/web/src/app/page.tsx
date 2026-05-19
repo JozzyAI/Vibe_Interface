@@ -9,7 +9,7 @@ import {
 } from "@/lib/dashboard-page-data";
 import { getPIIdeaExecutionRoot } from "@/lib/pi-ideas";
 import { readPIWorkspaceFiles } from "@/lib/pi-workspace-files";
-import { getRemoteApprovalOverview } from "@/lib/remote-agents";
+import { getRemoteApprovalOverview } from "@/lib/backend";
 
 export async function generateMetadata(props: {
   searchParams: Promise<{ project?: string }>;

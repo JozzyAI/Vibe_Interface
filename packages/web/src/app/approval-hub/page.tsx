@@ -7,7 +7,7 @@ import {
 import { getPIApprovalHubData } from "@/lib/pi-approval-hub";
 import { getPIIdeaExecutionRoot } from "@/lib/pi-ideas";
 import { readPIWorkspaceFiles } from "@/lib/pi-workspace-files";
-import { getRemoteApprovalOverview } from "@/lib/remote-agents";
+import { getRemoteApprovalOverview } from "@/lib/backend";
 
 export const dynamic = "force-dynamic";
 

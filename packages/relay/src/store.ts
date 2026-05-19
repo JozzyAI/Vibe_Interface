@@ -218,7 +218,8 @@ function serializeEnrollment(row: EnrollmentRow) {
     projectLabel: row.project_label,
     toolType: row.tool_type ?? "",
     relayUrl: row.relay_url ?? undefined,
-    relayToken: row.relay_token ?? undefined,
+    // relayToken intentionally omitted — never include in listing/overview responses.
+    // consumeEnrollment reads relay_token directly from the DB row for the config payload.
     consumedAt: row.consumed_at ?? undefined,
     revokedAt: row.revoked_at ?? undefined,
     expiresAt: row.expires_at,
@@ -239,6 +240,15 @@ export function registerAgent(input: {
   const db = getDb();
   const t = now();
   const agentId = input.agentId?.trim() || uid("rag");
+
+  // Block re-registration for tombstoned agents. This is the second guard (heartbeatAgent
+  // returning shouldStop:true is the primary stop signal; this prevents a race where the
+  // daemon calls register before the next heartbeat cycle).
+  if (input.agentId?.trim()) {
+    const removed = db.prepare("SELECT agent_id FROM removed_agents WHERE agent_id = ?").get(agentId);
+    if (removed) throw new Error(`Agent has been permanently removed: ${agentId}. Re-pair to reconnect.`);
+  }
+
   const existing = db.prepare("SELECT * FROM agents WHERE agent_id = ?").get(agentId) as AgentRow | undefined;
 
   db.prepare(`
@@ -306,7 +316,14 @@ export function heartbeatAgent(input: {
   const db = getDb();
   const t = now();
   const existing = db.prepare("SELECT * FROM agents WHERE agent_id = ?").get(input.agentId) as AgentRow | undefined;
-  if (!existing) throw new Error(`Unknown remote agent: ${input.agentId}`);
+  if (!existing) {
+    // If the agent was previously removed, tell the daemon to stop instead of throwing.
+    // Pi-agent re-registers on "Unknown remote agent" errors — returning shouldStop:true
+    // here causes it to stop cleanly before reaching the re-registration path.
+    const removed = db.prepare("SELECT agent_id FROM removed_agents WHERE agent_id = ?").get(input.agentId);
+    if (removed) return { agent: null as never, shouldStop: true };
+    throw new Error(`Unknown remote agent: ${input.agentId}`);
+  }
 
   db.prepare(`
     UPDATE agents SET
@@ -366,6 +383,7 @@ export function pollAgent(agentId: string) {
         agent: { agentId, displayName: "", projectLabel: "", toolType: "", hostLabel: "", status: "paused", permissionMode: "manual", timeoutSeconds: 10, connectionState: "disabled", consecutiveFailures: 0, sessionHistory: [], authConnectors: [], lastSeenAt: t, createdAt: t },
         pendingRequests: [], resolvedRequests: [], pendingJobs: [], jobs: [],
         removedJobIds: [], controlCommands: [],
+        shouldStop: true,
       };
     }
     throw new Error(`Unknown remote agent: ${agentId}`);
@@ -872,7 +890,12 @@ export function removeAgent(agentId: string) {
   const db = getDb();
   const t = now();
   const agent = db.prepare("SELECT agent_id FROM agents WHERE agent_id = ?").get(agentId) as { agent_id: string } | undefined;
-  if (!agent) throw new Error(`Unknown remote agent: ${agentId}`);
+  if (!agent) {
+    // Already removed — idempotent success. Check removed_agents to distinguish from truly unknown.
+    const wasRemoved = db.prepare("SELECT agent_id FROM removed_agents WHERE agent_id = ?").get(agentId);
+    if (wasRemoved) return; // already gone, goal achieved
+    throw new Error(`Unknown remote agent: ${agentId}`);
+  }
 
   const jobs = db.prepare("SELECT job_id FROM jobs WHERE agent_id = ?").all(agentId) as Array<{ job_id: string }>;
   for (const { job_id } of jobs) {

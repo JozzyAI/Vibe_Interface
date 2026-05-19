@@ -31,6 +31,15 @@ export async function getRemoteAgentsBackend() {
 }
 
 /**
+ * Convenience wrapper — always uses the correct backend regardless of mode.
+ * Import this in server components instead of importing directly from remote-agents.ts.
+ */
+export async function getRemoteApprovalOverview() {
+  const { getRemoteApprovalOverview: fn } = await getRemoteAgentsBackend();
+  return fn();
+}
+
+/**
  * Synchronous version using dynamic require — only for use in route files
  * that already know they need a specific function at request time.
  * Prefer getRemoteAgentsBackend() for new code.

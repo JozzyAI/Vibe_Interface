@@ -1248,7 +1248,8 @@ export async function createRemoteEnrollment(input: {
 
   store.enrollments = [enrollment, ...activeEnrollments(store)];
   await writeStore(store);
-  return enrollment;
+  // Return the public summary (relayToken stripped) — the token stays in store.json only.
+  return serializeEnrollment(enrollment);
 }
 
 export async function consumeRemoteEnrollment(input: {

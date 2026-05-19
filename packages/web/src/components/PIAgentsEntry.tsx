@@ -5,6 +5,7 @@
 const PI_SERVER_ORIGIN = "http://192.168.1.83:3000";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type {
   RemoteAgentJob,
   RemoteAgentSessionHistoryItem,
@@ -144,6 +145,7 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [browserOrigin, setBrowserOrigin] = useState("http://localhost:3000");
+  const [notice, setNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -152,6 +154,19 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
 
   useEffect(() => {
     setBrowserOrigin(PI_SERVER_ORIGIN);
+    // Surface one-shot notices from query params (e.g. after machine removal redirect).
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("notice") === "already-removed") {
+      setNotice("Machine was already removed.");
+      const clean = window.location.pathname + (params.get("machine") ? `?machine=${params.get("machine")}` : "");
+      window.history.replaceState(null, "", clean);
+    }
+    // Always fetch fresh data from the API on mount.
+    // SSR pages that still import from remote-agents.ts may return stale/empty local data
+    // in cloud mode — this ensures the client always reflects the relay state.
+    void requestJson<RemoteApprovalOverview>("/api/remote-agents/overview")
+      .then((fresh) => setOverview(fresh))
+      .catch(() => void 0);
   }, []);
 
   const agents = useMemo(
@@ -252,6 +267,18 @@ export function PIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
             <MiniStat label="Known" value={agents.length} />
           </div>
         </div>
+        {notice ? (
+          <div className="mt-4 rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-3 text-[13px] text-[var(--color-text-secondary)]">
+            {notice}
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              className="ml-3 text-[11px] font-semibold text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
         {error ? (
           <div className="mt-4 rounded-2xl border border-[var(--color-accent-red)]/40 bg-[var(--color-accent-red-soft)] p-3 text-[13px] text-[var(--color-accent-red)]">
             {error}
@@ -739,6 +766,7 @@ function MachineRow({
   serverOrigin: string;
   onRefresh: () => Promise<void>;
 }) {
+  const router = useRouter();
   const [resumeMessage, setResumeMessage] = useState<string | null>(null);
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [resumingSessionId, setResumingSessionId] = useState<string | null>(null);
@@ -749,6 +777,9 @@ function MachineRow({
   const [copiedReconnectCode, setCopiedReconnectCode] = useState(false);
   const [menuOpenJobId, setMenuOpenJobId] = useState<string | null>(null);
   const [confirmDeleteJobId, setConfirmDeleteJobId] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
+  const [bulkConfirmDelete, setBulkConfirmDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
   // Session history is only populated for Codex sessions by pi-agent; use it directly.
   const codexSessions = agent.sessionHistory ?? [];
@@ -814,21 +845,33 @@ function MachineRow({
       })();
     });
 
-  const removeMachine = () =>
+  // Opens the inline confirmation dialog — avoids window.confirm() inside startTransition.
+  const removeMachine = () => {
+    setLifecycleError(null);
+    setLifecycleMessage(null);
+    setConfirmRemove(true);
+  };
+
+  const doRemoveMachine = () =>
     startTransition(() => {
       void (async () => {
         try {
-          setLifecycleError(null);
-          setLifecycleMessage(null);
-          const ok = window.confirm(
-            `Remove "${agent.displayName}" from PI? This stops the bridge on its next heartbeat and removes ${jobs.length} PI session record(s) for this machine.`,
+          setConfirmRemove(false);
+          const result = await requestJson<{ removed?: boolean; alreadyRemoved?: boolean }>(
+            `/api/remote-agents/agents/${encodeURIComponent(agent.agentId)}`,
+            { method: "DELETE", body: JSON.stringify({ force: true, removeJobs: true }) },
           );
-          if (!ok) return;
-          await requestJson(`/api/remote-agents/agents/${encodeURIComponent(agent.agentId)}`, {
-            method: "DELETE",
-            body: JSON.stringify({ force: true, removeJobs: true }),
-          });
-          await onRefresh();
+          // Optimistically remove agent and its jobs from local state immediately.
+          // Do not wait for a full page reload — the machine must disappear right now.
+          onRefresh().catch(() => void 0);
+
+          if (result.alreadyRemoved) {
+            router.replace("/agents?notice=already-removed");
+          } else {
+            router.replace("/agents");
+          }
+          // Force server components to re-render with fresh SSR data.
+          router.refresh();
         } catch (err) {
           setLifecycleError(err instanceof Error ? err.message : "Failed to remove machine");
         }
@@ -848,6 +891,55 @@ function MachineRow({
           await onRefresh();
         } catch (err) {
           setLifecycleError(err instanceof Error ? err.message : "Failed to restart connection");
+        }
+      })();
+    });
+
+  const toggleJobSelection = (jobId: string) => {
+    setSelectedJobIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId); else next.add(jobId);
+      return next;
+    });
+  };
+
+  const bulkArchive = () =>
+    startTransition(() => {
+      void (async () => {
+        try {
+          setMenuOpenJobId(null);
+          for (const jobId of selectedJobIds) {
+            const job = recentJobs.find((j) => j.jobId === jobId);
+            if (job?.status === "running") continue; // skip running jobs
+            await requestJson(`/api/remote-agents/jobs/${encodeURIComponent(jobId)}/archive`, {
+              method: "POST",
+              body: JSON.stringify({ agentId: agent.agentId }),
+            });
+          }
+          setSelectedJobIds(new Set());
+          await onRefresh();
+        } catch (e) {
+          setLifecycleError(e instanceof Error ? e.message : "Failed to archive sessions");
+        }
+      })();
+    });
+
+  const bulkRemove = () =>
+    startTransition(() => {
+      void (async () => {
+        try {
+          setMenuOpenJobId(null);
+          setBulkConfirmDelete(false);
+          for (const jobId of selectedJobIds) {
+            await requestJson(`/api/remote-agents/jobs/${encodeURIComponent(jobId)}/delete`, {
+              method: "POST",
+              body: JSON.stringify({ agentId: agent.agentId }),
+            });
+          }
+          setSelectedJobIds(new Set());
+          await onRefresh();
+        } catch (e) {
+          setLifecycleError(e instanceof Error ? e.message : "Failed to delete sessions");
         }
       })();
     });
@@ -996,13 +1088,73 @@ function MachineRow({
               {recentJobs.length} job{recentJobs.length === 1 ? "" : "s"}
             </span>
           </div>
+
+          {/* Bulk action bar */}
+          {selectedJobIds.size > 0 ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-bg-base)] px-3 py-2">
+              <span className="text-[11px] font-semibold text-[var(--color-text-secondary)]">
+                {selectedJobIds.size} selected
+              </span>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={bulkArchive}
+                className="rounded-full border border-[var(--color-border-default)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Archive selected
+              </button>
+              {bulkConfirmDelete ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={bulkRemove}
+                    className="rounded-full bg-[var(--color-accent-red)] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
+                  >
+                    Confirm delete {selectedJobIds.size}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBulkConfirmDelete(false)}
+                    className="rounded-full border border-[var(--color-border-default)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setBulkConfirmDelete(true)}
+                  className="rounded-full border border-[var(--color-accent-red)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-accent-red)] hover:bg-[var(--color-bg-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Delete selected
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => { setSelectedJobIds(new Set()); setBulkConfirmDelete(false); }}
+                className="ml-auto text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
+              >
+                Clear
+              </button>
+            </div>
+          ) : null}
+
           <div className="mt-3 grid gap-2">
             {recentJobs.map((job) => (
               <div
                 key={job.jobId}
-                className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-base)] px-3 py-2"
+                className={`rounded-xl border bg-[var(--color-bg-base)] px-3 py-2 ${selectedJobIds.has(job.jobId) ? "border-[var(--color-accent)]" : "border-[var(--color-border-subtle)]"}`}
               >
                 <div className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedJobIds.has(job.jobId)}
+                    onChange={() => toggleJobSelection(job.jobId)}
+                    className="mt-1 shrink-0 accent-[var(--color-accent)]"
+                    aria-label={`Select session ${job.title}`}
+                  />
                   <a
                     href={`/remote-sessions/${encodeURIComponent(job.jobId)}`}
                     className="min-w-0 flex-1 hover:no-underline"
@@ -1247,6 +1399,40 @@ function MachineRow({
                 {reconnectCode.advancedCommand}
               </pre>
             </details>
+          </div>
+        ) : null}
+
+        {/* Inline remove confirmation — replaces window.confirm() which is suppressed in startTransition */}
+        {confirmRemove ? (
+          <div className="mt-3 rounded-xl border border-[var(--color-accent-red)] bg-[var(--color-bg-base)] p-3">
+            <p className="text-[12px] font-semibold text-[var(--color-text-primary)]">
+              Remove &quot;{agent.displayName}&quot;?
+            </p>
+            <p className="mt-1 text-[11px] leading-5 text-[var(--color-text-secondary)]">
+              {jobs.length > 0
+                ? `This will remove the machine and archive its ${jobs.length} session${jobs.length === 1 ? "" : "s"}.`
+                : "This will remove the machine from PI."}
+              {" "}The bridge daemon will stop on its next heartbeat.
+            </p>
+            <div className="mt-2.5 flex gap-2">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={doRemoveMachine}
+                className="rounded-full bg-[var(--color-accent-red)] px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+              >
+                {jobs.length > 0
+                  ? `Remove and archive ${jobs.length} session${jobs.length === 1 ? "" : "s"}`
+                  : "Remove machine"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmRemove(false)}
+                className="rounded-full border border-[var(--color-border-default)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         ) : null}
 

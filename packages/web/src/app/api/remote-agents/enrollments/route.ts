@@ -13,7 +13,9 @@ export async function POST(request: NextRequest) {
     };
     const { createRemoteEnrollment } = await getRemoteAgentsBackend();
     const result = await createRemoteEnrollment(body);
-    const { pairCommand, advancedCommand, relayUrl, ...enrollment } = result as typeof result & { pairCommand?: string; advancedCommand?: string; relayUrl?: string };
+    // Destructure out fields that must never reach the browser.
+    // relayToken is a secret daemon auth token — it must not appear in any dashboard response.
+    const { pairCommand, advancedCommand, relayUrl, relayToken: _redacted, ...enrollment } = result as typeof result & { pairCommand?: string; advancedCommand?: string; relayUrl?: string; relayToken?: string };
     return jsonWithCorrelation({ enrollment, pairCommand, advancedCommand, relayUrl }, { status: 200 }, correlationId);
   } catch (error) {
     return jsonWithCorrelation(

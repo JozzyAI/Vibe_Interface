@@ -2,7 +2,7 @@ import { readdir, mkdir } from "node:fs/promises";
 import { join, resolve, normalize } from "node:path";
 import { type NextRequest } from "next/server";
 import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
-import { getRemoteApprovalOverview } from "@/lib/remote-agents";
+import { getRemoteApprovalOverview } from "@/lib/backend";
 
 export interface BrowseEntry {
   name: string;

@@ -894,7 +894,32 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
           </div>
         ) : null}
 
-        {!canSendInput ? (
+        {!canSendInput && job.status === "completed" ? (
+          <div className="mt-4 rounded-2xl border border-[var(--color-status-success)]/30 bg-[var(--color-status-success-soft)] p-4 text-[13px] leading-6">
+            <p className="font-semibold text-[var(--color-status-success)]">Session completed</p>
+            <p className="mt-1 text-[var(--color-text-secondary)]">
+              Claude finished this task and exited. The terminal output above is read-only.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={isArchiving || isRemoving}
+                onClick={() => void archiveSession()}
+                className="rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-elevated)] px-3 py-1.5 text-[12px] font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isArchiving ? "Archiving…" : "Archive session"}
+              </button>
+              <button
+                type="button"
+                disabled={isArchiving || isRemoving}
+                onClick={() => void removeSession()}
+                className="rounded-full border border-[var(--color-status-danger)]/30 bg-transparent px-3 py-1.5 text-[12px] font-medium text-[var(--color-status-danger)] hover:bg-[var(--color-status-danger)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isRemoving ? "Removing…" : "Delete session"}
+              </button>
+            </div>
+          </div>
+        ) : !canSendInput ? (
           <div className="mt-4 rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-base)] p-3 text-[13px] leading-6 text-[var(--color-text-secondary)]">
             This session is not accepting input right now.{" "}
             {job.status !== "running"
@@ -998,6 +1023,7 @@ export function PIRemoteSessionDetail({ jobId, initialOverview }: Props) {
               appearance="dark"
               height="calc(100vh - 260px)"
               chromeless
+              jobStatus={job.status}
             />
           ) : (
             <RemoteLogTerminal content={job.logTail ?? ""} height="calc(100vh - 260px)" />

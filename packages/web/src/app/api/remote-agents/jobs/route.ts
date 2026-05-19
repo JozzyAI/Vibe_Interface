@@ -57,7 +57,16 @@ function buildProviderCommand(input: {
   if (providerArgs.length > 0) {
     command.push("--", ...extraOptions, ...providerArgs);
   } else if (input.prompt?.trim()) {
-    command.push("--", ...extraOptions, withPiHookInstructions(input.prompt) ?? input.prompt.trim());
+    if (input.provider === "claude") {
+      // Claude Code treats a positional text arg as a one-shot non-interactive task and exits.
+      // Only pass launch flags here; the prompt is injected into the live REPL via tmux
+      // after startup (see PI_INITIAL_PROMPT in the job env).
+      if (extraOptions.length > 0) {
+        command.push("--", ...extraOptions);
+      }
+    } else {
+      command.push("--", ...extraOptions, withPiHookInstructions(input.prompt) ?? input.prompt.trim());
+    }
   } else if (extraOptions.length > 0) {
     command.push("--", ...extraOptions);
   }
@@ -105,13 +114,19 @@ export async function POST(request: NextRequest) {
         : body.provider === "claude"
           ? "Start Claude Code via bridge"
           : undefined);
+    // For Claude sessions, the initial prompt must be injected into the live REPL via
+    // tmux after startup — not passed as a positional CLI arg (which triggers one-shot exit).
+    const jobEnv: Record<string, string> = { ...(body.env ?? {}) };
+    if (body.provider === "claude" && body.prompt?.trim()) {
+      jobEnv["PI_INITIAL_PROMPT"] = withPiHookInstructions(body.prompt) ?? body.prompt.trim();
+    }
     const { createRemoteAgentJob } = await getRemoteAgentsBackend();
     const job = await createRemoteAgentJob({
       agentId: body.agentId,
       title,
       command,
       cwd: body.cwd,
-      env: body.env,
+      env: Object.keys(jobEnv).length > 0 ? jobEnv : body.env,
       ralphEnabled: body.ralphEnabled,
       autoResumeUsageLimit: body.autoResumeUsageLimit,
       autoRestartCodex: body.autoRestartCodex,

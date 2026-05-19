@@ -28,6 +28,8 @@ interface DirectTerminalProps {
   readOnly?: boolean;
   showFloatingControls?: boolean;
   fontSize?: number;
+  /** When "completed", suppress the "[Terminal exited with code N]" notice from MuxProvider. */
+  jobStatus?: string;
 }
 
 type TerminalVariant = "agent" | "orchestrator";
@@ -119,6 +121,7 @@ export function DirectTerminal({
   readOnly = false,
   showFloatingControls = true,
   fontSize = 13,
+  jobStatus,
 }: DirectTerminalProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -353,6 +356,8 @@ export function DirectTerminal({
 
         // Write data directly — no buffering.
         unsubscribe = subscribeTerminal(sessionId, (data) => {
+          // Suppress the PTY-gone notice for completed jobs — expected exit, not an error.
+          if (jobStatus === "completed" && data.includes("[Terminal exited with code")) return;
           terminal.write(data);
           // Hide hint on first byte of real output.
           if (hideHintRef.current) {

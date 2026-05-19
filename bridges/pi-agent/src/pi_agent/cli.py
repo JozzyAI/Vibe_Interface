@@ -540,6 +540,32 @@ def detect_provider_state(screen: str, *, provider: str | None = None) -> dict[s
             "provider": provider_name,
         }
 
+    # Claude Code workspace trust dialog — new/untrusted directories show a safety check
+    # before starting. PI-managed sessions should auto-accept (the user already chose the cwd).
+    if provider_name == "claude" and (
+        "yes, i trust this folder" in lower
+        or "quick safety check" in lower
+        or ("is this a project you created" in lower)
+    ):
+        return {
+            "state": "waiting_approval",
+            "confidence": 0.90,
+            "reason": "claude_trust_prompt",
+            "source": "pty",
+            "provider": "claude",
+        }
+
+    # Claude Code interactive REPL — box-drawing prompt corners (╭─ / ╰─) are unique to
+    # Claude Code's TUI and indicate the input box is rendered and waiting for input.
+    if provider_name == "claude" and ("╰─" in stripped or "╭─" in stripped):
+        return {
+            "state": "waiting_input",
+            "confidence": 0.85,
+            "reason": "claude_repl_prompt",
+            "source": "pty",
+            "provider": "claude",
+        }
+
     return {
         "state": "unknown",
         "confidence": 0.35,
@@ -2428,6 +2454,14 @@ def run_daemon(args: argparse.Namespace) -> int:
                 # current shell, so conda/pyenv paths can be missing).
                 "PATH": os.environ.get("PATH", ""),
             }
+            # Pass relay credentials so the inner pi_agent.cli process can reach
+            # the relay for registration and heartbeats (cloud mode).
+            _relay_url = child_env.get("PI_RELAY_URL", "")
+            _relay_token = child_env.get("PI_RELAY_TOKEN", "")
+            if _relay_url:
+                remote_env["PI_RELAY_URL"] = _relay_url
+            if _relay_token:
+                remote_env["PI_RELAY_TOKEN"] = _relay_token
             if handoff_enabled():
                 remote_env.update(
                     {
@@ -2480,12 +2514,15 @@ def run_daemon(args: argparse.Namespace) -> int:
                 force_reason="started",
             )
             log_path.write_text(screen, encoding="utf-8", errors="replace")
+            _initial_prompt = child_env.get("PI_INITIAL_PROMPT", "").strip()
             launched_jobs[job_id] = {
                 "kind": "tmux",
                 "sessionName": session_name,
                 "logPath": log_path,
                 "artifactDir": artifact_dir,
                 "provider": provider,
+                "initialPrompt": _initial_prompt if _initial_prompt else None,
+                "initialPromptSent": False,
             }
             safe_report_job(
                 job_id,
@@ -2937,6 +2974,43 @@ def run_daemon(args: argparse.Namespace) -> int:
                             screen,
                         )
                         request_pi_utility_session_from_runtime(job_id, screen)
+
+                        # Inject PI_INITIAL_PROMPT into the Claude REPL once after startup.
+                        # The prompt must NOT be a positional CLI arg (triggers one-shot exit).
+                        # Instead we wait for the REPL to be ready, then send via tmux.
+                        _ip = job_state.get("initialPrompt")
+                        if _ip and not job_state.get("initialPromptSent") and screen.strip():
+                            _ps = provider_state.get("state")
+                            _stable = float(provider_state.get("stableForSeconds") or 0.0)
+                            # Fire on explicit waiting_input signal OR after 4s of stable screen
+                            # (Claude loading animation stops once the REPL prompt appears).
+                            if _ps == "waiting_input" or (
+                                _stable >= 4.0 and _ps not in ("busy", "waiting_approval")
+                            ):
+                                if tmux_send_input(session_name, _ip, True):
+                                    job_state["initialPromptSent"] = True
+                                    screen = tmux_capture(session_name)
+                                    provider_state = add_provider_state_stability(
+                                        job_state,
+                                        detect_provider_state(
+                                            screen,
+                                            provider=str(job_state.get("provider") or "unknown"),
+                                        ),
+                                        screen,
+                                    )
+
+                        # Claude: auto-accept workspace trust prompt for PI-managed sessions.
+                        # The user already chose this cwd when starting the session, so trust
+                        # is implied. Sending "1" selects "Yes, I trust this folder".
+                        if (
+                            str(job_state.get("provider") or "unknown").lower() == "claude"
+                            and provider_state.get("state") == "waiting_approval"
+                            and provider_state.get("reason") == "claude_trust_prompt"
+                        ):
+                            _trust_fp = screen_fingerprint(screen)
+                            if job_state.get("lastTrustPromptFingerprint") != _trust_fp:
+                                job_state["lastTrustPromptFingerprint"] = _trust_fp
+                                tmux_send_input(session_name, "1", True)
 
                         # Codex-only: auto-approve diff confirmation prompts when always_allow.
                         # Claude Code approvals are handled by the PreToolUse hook (pi-approve),

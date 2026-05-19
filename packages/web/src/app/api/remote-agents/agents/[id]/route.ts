@@ -31,6 +31,11 @@ export async function DELETE(
     return jsonWithCorrelation({ forgotten: true }, { status: 200 }, correlationId);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Failed to remove machine";
+    // "Unknown remote agent" means the agent is already gone — treat as idempotent success
+    // so the UI can refresh and navigate away instead of getting stuck on a stale page.
+    if (msg.includes("Unknown remote agent")) {
+      return jsonWithCorrelation({ removed: true, alreadyRemoved: true }, { status: 200 }, correlationId);
+    }
     const status = msg.includes("active job") ? 409 : 500;
     return jsonWithCorrelation({ error: msg }, { status }, correlationId);
   }

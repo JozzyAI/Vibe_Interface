@@ -4,7 +4,7 @@ import { PIWorkspaceShell } from "@/components/PIWorkspaceShell";
 import { getDashboardPageData } from "@/lib/dashboard-page-data";
 import { getPIIdeaExecutionRoot } from "@/lib/pi-ideas";
 import { readPIWorkspaceFiles } from "@/lib/pi-workspace-files";
-import { getRemoteApprovalOverview } from "@/lib/remote-agents";
+import { getRemoteApprovalOverview } from "@/lib/backend";
 import type { RemoteAgentSummary } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
