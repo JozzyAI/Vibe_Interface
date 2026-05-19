@@ -9,7 +9,7 @@
 
 import { WebSocketServer, WebSocket } from "ws";
 import { homedir, userInfo } from "node:os";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { findTmux, resolveTmuxSession, validateSessionId } from "./tmux-utils.js";
 import type { RemoteTerminalRelay } from "./remote-terminal-relay.js";
 
@@ -29,6 +29,7 @@ type ClientMessage =
 // ── Server → Client ──
 type ServerMessage =
   | { ch: "terminal"; id: string; type: "data"; data: string }
+  | { ch: "terminal"; id: string; type: "history"; data: string }
   | { ch: "terminal"; id: string; type: "exited"; code: number }
   | { ch: "terminal"; id: string; type: "opened" }
   | { ch: "terminal"; id: string; type: "error"; message: string }
@@ -518,6 +519,42 @@ class TerminalManager {
   }
 
   /**
+   * Capture tmux pane history to pre-populate xterm's normal buffer.
+   *
+   * Runs `tmux capture-pane -p -e -S -<maxLines> -t <session>` synchronously.
+   * Only works for LOCAL sessions — remote (relay) sessions return "".
+   * Returns empty string on any error so callers can skip history gracefully.
+   */
+  captureHistory(id: string, maxLines = 2000, maxBytes = 100_000): string {
+    const terminal = this.terminals.get(id);
+    // Only local sessions have a reachable tmux pane on this machine.
+    if (!terminal || terminal.isRemote || !terminal.tmuxSessionId) return "";
+
+    try {
+      const result = spawnSync(
+        this.TMUX,
+        ["capture-pane", "-p", "-e", "-S", `-${maxLines}`, "-t", terminal.tmuxSessionId],
+        { encoding: "utf8", timeout: 3000, maxBuffer: 200_000 },
+      );
+      if (result.error || result.status !== 0 || !result.stdout) return "";
+
+      // Convert bare LF to CRLF so xterm.js (convertEol:false) renders lines correctly.
+      const output = result.stdout.replace(/\r?\n/g, "\r\n");
+
+      // Trim oldest lines if the payload is too large.
+      if (Buffer.byteLength(output, "utf8") > maxBytes) {
+        const trimmed = Buffer.from(output, "utf8").slice(-maxBytes).toString("utf8");
+        const nl = trimmed.indexOf("\r\n");
+        return nl >= 0 ? trimmed.slice(nl + 2) : trimmed;
+      }
+
+      return output;
+    } catch {
+      return "";
+    }
+  }
+
+  /**
    * Get buffered data for a terminal
    */
   getBuffer(id: string): string {
@@ -565,6 +602,15 @@ export function createMuxWebSocket(
       const openedMsg: ServerMessage = { ch: "terminal", id, type: "opened" };
       ws.send(JSON.stringify(openedMsg));
       if (!subscriptions.has(id)) {
+        // Send tmux pane history BEFORE the ring buffer so xterm's normal
+        // buffer is populated with scrollback before any alt-screen sequences
+        // arrive in the live stream. This enables mouse-wheel scrollback even
+        // when the session is currently in alt-screen mode (Claude Code TUI).
+        const history = terminalManager.captureHistory(id);
+        if (history) {
+          const histMsg: ServerMessage = { ch: "terminal", id, type: "history", data: history };
+          ws.send(JSON.stringify(histMsg));
+        }
         const buffer = terminalManager.getBuffer(id);
         if (buffer) {
           const bufferMsg: ServerMessage = { ch: "terminal", id, type: "data", data: buffer };

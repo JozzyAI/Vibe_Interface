@@ -318,6 +318,52 @@ export function DirectTerminal({
         };
         terminalRef.current?.addEventListener("contextmenu", handleContextMenu);
 
+        // Intercept wheel events before xterm processes them.
+        //
+        // In alternate-screen mode (used by Claude Code, Codex, vim, less, etc.)
+        // xterm.js converts wheel events to cursor-key escape sequences
+        // (↑/↓) and sends them directly to the PTY. This cycles shell history
+        // instead of scrolling the viewport — the reported bug.
+        //
+        // Fix: capture wheel on the container before it reaches xterm's inner
+        // viewport element. Stop propagation so xterm never sees the event.
+        // Adjust .xterm-viewport scrollTop directly — this is exactly what
+        // xterm's own handleWheel does in normal mode, so it triggers xterm's
+        // _handleScroll → ydisp update in the same event loop. In alt screen
+        // scrollHeight === clientHeight so the adjustment is a safe no-op.
+        // Arrow Up/Down keyboard events are unaffected (different event type).
+        const xtermViewport = terminalRef.current?.querySelector(".xterm-viewport") as HTMLElement | null;
+
+        const handleWheel = (e: WheelEvent) => {
+          // Let Ctrl/Cmd+wheel through for browser zoom.
+          if (e.ctrlKey || e.metaKey) return;
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+
+          if (!xtermViewport) return;
+
+          // Normalize to pixels — mirrors xterm's internal _getPixelsScrolled.
+          let pixels: number;
+          switch (e.deltaMode) {
+            case 1: // DOM_DELTA_LINE (Firefox mouse)
+              pixels = e.deltaY * fontSize * 1.5;
+              break;
+            case 2: // DOM_DELTA_PAGE
+              pixels = e.deltaY * xtermViewport.clientHeight;
+              break;
+            default: // DOM_DELTA_PIXEL (Chrome/Safari trackpad + mouse)
+              pixels = e.deltaY;
+              break;
+          }
+
+          // Apply scroll sensitivity (matches xterm scrollSensitivity: 3).
+          xtermViewport.scrollTop += pixels;
+        };
+        // capture:true — fires before xterm's bubble listener on .xterm element.
+        // passive:false — required to call preventDefault().
+        terminalRef.current?.addEventListener("wheel", handleWheel, { capture: true, passive: false });
+
         // Ctrl+C with selection → copy (suppress SIGINT). Cmd+C on Mac.
         // Ctrl+Shift+C is NOT used — the browser intercepts it for DevTools
         // before JavaScript can see it, so it cannot be overridden.
@@ -388,6 +434,7 @@ export function DirectTerminal({
           terminalRef.current?.removeEventListener("copy", handleCopy, true);
           terminalRef.current?.removeEventListener("paste", handlePaste, true);
           terminalRef.current?.removeEventListener("contextmenu", handleContextMenu);
+          terminalRef.current?.removeEventListener("wheel", handleWheel, { capture: true });
           window.removeEventListener("resize", handleResize);
           inputDisposable?.dispose();
           inputDisposable = null;

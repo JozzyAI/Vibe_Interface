@@ -127,8 +127,11 @@ export function MuxProvider({ children }: { children: ReactNode }) {
           const msg = JSON.parse(event.data as string) as ServerMessage;
 
           if (msg.ch === "terminal") {
-            if (msg.type === "data") {
-              // Push to subscribers
+            if (msg.type === "data" || msg.type === "history") {
+              // Push to subscribers.
+              // "history" is tmux pane scrollback sent before live data —
+              // written to xterm's normal buffer so wheel scrollback works
+              // even when the session is in alt-screen mode (Claude TUI).
               const subs = subscribersRef.current.get(msg.id);
               if (subs) {
                 for (const callback of subs) {

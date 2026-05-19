@@ -12,6 +12,7 @@ export type ClientMessage =
 
 export type ServerMessage =
   | { ch: "terminal"; id: string; type: "data"; data: string }
+  | { ch: "terminal"; id: string; type: "history"; data: string }
   | { ch: "terminal"; id: string; type: "exited"; code: number }
   | { ch: "terminal"; id: string; type: "opened" }
   | { ch: "terminal"; id: string; type: "error"; message: string }
