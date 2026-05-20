@@ -6,7 +6,7 @@
 #   sudo bash vm-init.sh <domain> <pi-relay-token> <pi-relay-admin-token> [disk-device]
 #
 # Example:
-#   sudo bash vm-init.sh relay.yourdomain.com tok_abc123 adm_xyz789 /dev/sdb
+#   sudo bash vm-init.sh relay.dynastylab.ai tok_abc123 adm_xyz789 /dev/sdb
 #
 # After this script completes the relay is live at https://<domain>.
 # To update after a code change: sudo bash deploy-update.sh
@@ -106,3 +106,6 @@ echo ""
 echo "PI relay is live at https://$DOMAIN"
 echo "Set in dashboard .env.local:   PI_SERVER=https://$DOMAIN"
 echo "Set in pi-agent config:        PI_SERVER=https://$DOMAIN"
+echo ""
+echo "When ready, shut down Fly.io:"
+echo "  fly apps destroy pi-relay-jozzy"
