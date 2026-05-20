@@ -128,7 +128,7 @@ export function DirectTerminal({
   const searchParams = useSearchParams();
   const { resolvedTheme } = useTheme();
   const terminalThemes = useMemo(() => buildTerminalThemes(variant), [variant]);
-  const { subscribeTerminal, writeTerminal, resizeTerminal: resizeTerminalMux, openTerminal, closeTerminal, status: muxStatus } = useMux();
+  const { subscribeTerminal, writeTerminal, resizeTerminal: resizeTerminalMux, openTerminal, closeTerminal, requestHistory, status: muxStatus } = useMux();
 
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<TerminalType | null>(null);
@@ -141,6 +141,14 @@ export function DirectTerminal({
   const [reloadError, setReloadError] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(true);
   const hideHintRef = useRef<(() => void) | null>(null);
+  // History overlay
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyText, setHistoryText] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const historyOpenRef = useRef(false);    // fast read inside event handlers
+  const historyLoadingRef = useRef(false); // prevent duplicate requests
+  const historyScrollRef = useRef<HTMLDivElement | null>(null);
 
   // Update URL when fullscreen changes
   useEffect(() => {
@@ -155,6 +163,24 @@ export function DirectTerminal({
     const newUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname;
     router.replace(newUrl, { scroll: false });
   }, [fullscreen, pathname, router, searchParams]);
+
+  // Scroll history overlay to the bottom when it opens so newest output is visible.
+  useEffect(() => {
+    if (historyOpen && historyScrollRef.current) {
+      historyScrollRef.current.scrollTop = historyScrollRef.current.scrollHeight;
+    }
+  }, [historyOpen, historyText]);
+
+  const closeHistoryOverlay = () => {
+    setHistoryOpen(false);
+    historyOpenRef.current = false;
+    setHistoryText("");
+    setHistoryError(null);
+    // Restore keyboard focus to xterm so arrow keys and Enter reach Claude immediately.
+    // Without this, clicking "Back to live" steals DOM focus; after the overlay unmounts
+    // focus goes to document.body and keyboard input stops reaching the terminal.
+    terminalInstance.current?.focus();
+  };
 
   async function handleReload(): Promise<void> {
     if (!isOpenCodeSession || reloading) return;
@@ -337,6 +363,11 @@ export function DirectTerminal({
         const handleWheel = (e: WheelEvent) => {
           // Let Ctrl/Cmd+wheel through for browser zoom.
           if (e.ctrlKey || e.metaKey) return;
+
+          // When the History overlay is open let wheel events reach the overlay
+          // scroll container naturally — do not intercept them here.
+          if (historyOpenRef.current) return;
+
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
@@ -357,7 +388,34 @@ export function DirectTerminal({
               break;
           }
 
-          // Apply scroll sensitivity (matches xterm scrollSensitivity: 3).
+          // Alt-screen (Claude Code TUI): xterm has no scrollback buffer here.
+          // On wheel-up, open the History overlay instead of sending cursor keys to Claude.
+          const isAltScreen = terminal.buffer.active.type === "alternate";
+          if (isAltScreen) {
+            if (pixels < 0 && !historyLoadingRef.current) {
+              // Request history snapshot and open overlay.
+              historyLoadingRef.current = true;
+              setHistoryLoading(true);
+              setHistoryError(null);
+              requestHistory(sessionId, 3000)
+                .then(({ data }) => {
+                  setHistoryText(data);
+                  setHistoryLoading(false);
+                  historyLoadingRef.current = false;
+                  setHistoryOpen(true);
+                  historyOpenRef.current = true;
+                })
+                .catch((err: unknown) => {
+                  setHistoryError(err instanceof Error ? err.message : "Failed to load history");
+                  setHistoryLoading(false);
+                  historyLoadingRef.current = false;
+                });
+            }
+            // Don't pass wheel events to xterm in alt-screen — avoids Arrow Up/Down being sent to Claude.
+            return;
+          }
+
+          // Normal buffer — adjust scrollTop directly (xterm's own scroll path).
           xtermViewport.scrollTop += pixels;
         };
         // capture:true — fires before xterm's bubble listener on .xterm element.
@@ -370,6 +428,14 @@ export function DirectTerminal({
         // Cmd+V / Ctrl+Shift+V → paste fallback.
         terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
           if (e.type !== "keydown") return true;
+
+          // Escape — close History overlay when open.
+          // Suppress the key from reaching Claude so we don't cancel its current operation.
+          // (xterm already has focus here since this event fired on the xterm element.)
+          if (e.code === "Escape" && historyOpenRef.current) {
+            closeHistoryOverlay();
+            return false;
+          }
 
           // Ctrl+C / Cmd+C — copy selection; when no selection, pass through as normal SIGINT/interrupt.
           const isCopy =
@@ -463,6 +529,7 @@ export function DirectTerminal({
     resizeTerminalMux,
     openTerminal,
     closeTerminal,
+    requestHistory,
     readOnly,
     fontSize,
   ]);
@@ -772,6 +839,65 @@ export function DirectTerminal({
               <span className="block opacity-70">Copy / paste</span>
               <span className="block">Ctrl+C with selection → copies &nbsp;·&nbsp; Ctrl+C without → interrupt</span>
               <span className="block">Right-click → copy / paste &nbsp;·&nbsp; Cmd+V / Ctrl+Shift+V → paste</span>
+            </div>
+          </div>
+        ) : null}
+        {/* History Overlay — read-only scrollback from tmux capture-pane */}
+        {historyLoading ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-[rgba(5,6,10,0.92)]">
+            <span className="font-mono text-[12px] text-[#8f98aa]">Loading history…</span>
+          </div>
+        ) : historyOpen ? (
+          <div className="absolute inset-0 z-20 flex flex-col bg-[#05060a]">
+            {/* Overlay header */}
+            <div className="flex h-9 shrink-0 items-center justify-between border-b border-[#171923] bg-[#0b0d13] px-4">
+              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8f98aa]">
+                Terminal History
+              </span>
+              <button
+                type="button"
+                onClick={closeHistoryOverlay}
+                className="flex items-center gap-1.5 rounded px-2 py-1 font-mono text-[11px] text-[#8f98aa] hover:bg-[#171923] hover:text-[#d4d4d8]"
+              >
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+                Back to live
+              </button>
+            </div>
+            {/* Scrollable history content */}
+            {historyError ? (
+              <div className="flex flex-1 items-center justify-center px-6 text-center">
+                <p className="font-mono text-[12px] text-[#ff6b78]">{historyError}</p>
+              </div>
+            ) : (
+              <div
+                ref={historyScrollRef}
+                className="flex-1 overflow-y-auto overflow-x-auto px-3 py-2"
+              >
+                <pre
+                  className="min-h-full w-max select-text whitespace-pre font-mono leading-[1.5] text-[#d4d4d8]"
+                  style={{
+                    fontFamily: 'var(--font-jetbrains-mono), "JetBrains Mono", "SF Mono", Menlo, Monaco, "Courier New", monospace',
+                    fontSize: `${fontSize}px`,
+                  }}
+                >
+                  {historyText || "(No history available)"}
+                </pre>
+              </div>
+            )}
+            {/* Overlay footer */}
+            <div className="flex h-7 shrink-0 items-center justify-between border-t border-[#171923] bg-[#0b0d13] px-4">
+              <span className="font-mono text-[10px] text-[#667085]">
+                Read-only · Select text to copy · Esc to close
+              </span>
+              <button
+                type="button"
+                onClick={closeHistoryOverlay}
+                className="font-mono text-[10px] text-[#5b7ef8] hover:underline"
+              >
+                ↩ back to live
+              </button>
             </div>
           </div>
         ) : null}

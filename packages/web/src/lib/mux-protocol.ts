@@ -5,6 +5,7 @@ export type ClientMessage =
   | { ch: "terminal"; id: string; type: "resize"; cols: number; rows: number }
   | { ch: "terminal"; id: string; type: "open" }
   | { ch: "terminal"; id: string; type: "close" }
+  | { ch: "terminal"; id: string; type: "history_request"; lines?: number }
   | { ch: "system"; type: "ping" }
   | { ch: "subscribe"; topics: ("sessions")[] };
 
@@ -13,6 +14,7 @@ export type ClientMessage =
 export type ServerMessage =
   | { ch: "terminal"; id: string; type: "data"; data: string }
   | { ch: "terminal"; id: string; type: "history"; data: string }
+  | { ch: "terminal"; id: string; type: "history_snapshot"; data: string; truncated: boolean }
   | { ch: "terminal"; id: string; type: "exited"; code: number }
   | { ch: "terminal"; id: string; type: "opened" }
   | { ch: "terminal"; id: string; type: "error"; message: string }

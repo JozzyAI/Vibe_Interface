@@ -9,6 +9,7 @@ interface MuxContextValue {
   openTerminal: (id: string) => void;
   closeTerminal: (id: string) => void;
   resizeTerminal: (id: string, cols: number, rows: number) => void;
+  requestHistory: (id: string, lines?: number) => Promise<{ data: string; truncated: boolean }>;
   status: "connecting" | "connected" | "reconnecting" | "disconnected";
   sessions: SessionPatch[];
 }
@@ -80,6 +81,10 @@ export function MuxProvider({ children }: { children: ReactNode }) {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const runtimeConfigRef = useRef<{ directTerminalPort?: string; proxyWsPath?: string }>({});
   const isDestroyedRef = useRef(false);
+  // Pending history_snapshot callbacks keyed by session id.
+  const historyCallbacksRef = useRef(
+    new Map<string, (data: string, truncated: boolean) => void>()
+  );
 
   const connect = useCallback(() => {
     if (wsRef.current) {
@@ -151,6 +156,12 @@ export function MuxProvider({ children }: { children: ReactNode }) {
                 for (const callback of subs) {
                   callback(notice);
                 }
+              }
+            } else if (msg.type === "history_snapshot") {
+              const cb = historyCallbacksRef.current.get(msg.id);
+              if (cb) {
+                historyCallbacksRef.current.delete(msg.id);
+                cb(msg.data, msg.truncated);
               }
             } else if (msg.type === "error") {
               console.error(`[MuxProvider] Terminal error for ${msg.id}:`, msg.message);
@@ -309,6 +320,32 @@ export function MuxProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const requestHistory = useCallback(
+    (id: string, lines = 3000): Promise<{ data: string; truncated: boolean }> => {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          historyCallbacksRef.current.delete(id);
+          reject(new Error("History request timed out"));
+        }, 8000);
+
+        historyCallbacksRef.current.set(id, (data, truncated) => {
+          clearTimeout(timeout);
+          resolve({ data, truncated });
+        });
+
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          const msg: ClientMessage = { ch: "terminal", id, type: "history_request", lines };
+          wsRef.current.send(JSON.stringify(msg));
+        } else {
+          clearTimeout(timeout);
+          historyCallbacksRef.current.delete(id);
+          reject(new Error("Not connected"));
+        }
+      });
+    },
+    [],
+  );
+
   const contextValue: MuxContextValue = useMemo(
     () => ({
       subscribeTerminal,
@@ -316,10 +353,11 @@ export function MuxProvider({ children }: { children: ReactNode }) {
       openTerminal,
       closeTerminal,
       resizeTerminal,
+      requestHistory,
       status,
       sessions,
     }),
-    [subscribeTerminal, writeTerminal, openTerminal, closeTerminal, resizeTerminal, status, sessions],
+    [subscribeTerminal, writeTerminal, openTerminal, closeTerminal, resizeTerminal, requestHistory, status, sessions],
   );
 
   return <MuxContext.Provider value={contextValue}>{children}</MuxContext.Provider>;

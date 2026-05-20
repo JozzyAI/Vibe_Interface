@@ -23,6 +23,7 @@ type ClientMessage =
   | { ch: "terminal"; id: string; type: "resize"; cols: number; rows: number }
   | { ch: "terminal"; id: string; type: "open" }
   | { ch: "terminal"; id: string; type: "close" }
+  | { ch: "terminal"; id: string; type: "history_request"; lines?: number }
   | { ch: "system"; type: "ping" }
   | { ch: "subscribe"; topics: ("sessions")[] };
 
@@ -30,6 +31,7 @@ type ClientMessage =
 type ServerMessage =
   | { ch: "terminal"; id: string; type: "data"; data: string }
   | { ch: "terminal"; id: string; type: "history"; data: string }
+  | { ch: "terminal"; id: string; type: "history_snapshot"; data: string; truncated: boolean }
   | { ch: "terminal"; id: string; type: "exited"; code: number }
   | { ch: "terminal"; id: string; type: "opened" }
   | { ch: "terminal"; id: string; type: "error"; message: string }
@@ -311,6 +313,12 @@ class TerminalManager {
       console.error(`[MuxServer] Failed to hide status bar for ${tmuxSessionId}:`, err.message);
     });
 
+    // Cancel any tmux copy-mode that may be active (e.g. left over from a previous
+    // copy-mode-based scroll experiment). In copy-mode arrow keys go to tmux navigation
+    // instead of the running program (Claude). This is a safe no-op when not in copy-mode.
+    const cancelCopyMode = spawn(this.TMUX, ["send-keys", "-t", tmuxSessionId, "-X", "cancel"]);
+    cancelCopyMode.on("error", () => {});
+
     // Build environment
     const homeDir = process.env.HOME || homedir();
     const currentUser = process.env.USER || userInfo().username;
@@ -519,26 +527,33 @@ class TerminalManager {
   }
 
   /**
-   * Capture tmux pane history to pre-populate xterm's normal buffer.
+   * Capture tmux pane history.
    *
-   * Runs `tmux capture-pane -p -e -S -<maxLines> -t <session>` synchronously.
+   * @param includeEscapes - true: pass -e so ANSI codes are preserved (for xterm rendering).
+   *                         false: plain text output for the read-only History Overlay.
+   *
    * Only works for LOCAL sessions — remote (relay) sessions return "".
    * Returns empty string on any error so callers can skip history gracefully.
    */
-  captureHistory(id: string, maxLines = 2000, maxBytes = 100_000): string {
+  captureHistory(id: string, maxLines = 2000, maxBytes = 100_000, includeEscapes = true): string {
     const terminal = this.terminals.get(id);
     // Only local sessions have a reachable tmux pane on this machine.
     if (!terminal || terminal.isRemote || !terminal.tmuxSessionId) return "";
 
     try {
-      const result = spawnSync(
-        this.TMUX,
-        ["capture-pane", "-p", "-e", "-S", `-${maxLines}`, "-t", terminal.tmuxSessionId],
-        { encoding: "utf8", timeout: 3000, maxBuffer: 200_000 },
-      );
+      const args = includeEscapes
+        ? ["capture-pane", "-p", "-e", "-S", `-${maxLines}`, "-t", terminal.tmuxSessionId]
+        : ["capture-pane", "-p",       "-S", `-${maxLines}`, "-t", terminal.tmuxSessionId];
+
+      const result = spawnSync(this.TMUX, args, {
+        encoding: "utf8",
+        timeout: 3000,
+        maxBuffer: 200_000,
+      });
       if (result.error || result.status !== 0 || !result.stdout) return "";
 
       // Convert bare LF to CRLF so xterm.js (convertEol:false) renders lines correctly.
+      // For plain-text overlay, CRLF is harmless in a <pre>.
       const output = result.stdout.replace(/\r?\n/g, "\r\n");
 
       // Trim oldest lines if the payload is too large.
@@ -708,6 +723,20 @@ export function createMuxWebSocket(
               terminalManager.write(id, msg.data);
             } else if (type === "resize" && "cols" in msg && "rows" in msg) {
               terminalManager.resize(id, msg.cols, msg.rows);
+            } else if (type === "history_request") {
+              const lines = "lines" in msg && typeof msg.lines === "number" ? msg.lines : 3000;
+              const MAX_BYTES = 500_000;
+              // Plain text (no -e) — the overlay renders in a <pre>, ANSI codes would show as raw escapes.
+              const raw = terminalManager.captureHistory(id, lines, MAX_BYTES, false);
+              const truncated = Buffer.byteLength(raw, "utf8") >= MAX_BYTES - 256;
+              const snapMsg: ServerMessage = {
+                ch: "terminal",
+                id,
+                type: "history_snapshot",
+                data: raw || "",
+                truncated,
+              };
+              if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(snapMsg));
             } else if (type === "close") {
               // Unsubscribe this client only — TerminalManager is shared across
               // all mux connections so we must not kill the PTY here.
