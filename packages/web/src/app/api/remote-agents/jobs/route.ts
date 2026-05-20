@@ -116,9 +116,9 @@ export async function POST(request: NextRequest) {
           : undefined);
     // For Claude sessions, the initial prompt must be injected into the live REPL via
     // tmux after startup — not passed as a positional CLI arg (which triggers one-shot exit).
-    // PI_INITIAL_GOAL carries the clean user goal for /goal injection.
+    // PI_INITIAL_GOAL carries the clean user prompt for /plan injection.
     // PI hook instructions are already present via CLAUDE.md and PI_HOOK_* env vars;
-    // they must not be included in the /goal condition.
+    // they must not be included in the /plan text.
     const jobEnv: Record<string, string> = { ...(body.env ?? {}) };
     if (body.provider === "claude" && body.prompt?.trim()) {
       jobEnv["PI_INITIAL_GOAL"] = body.prompt.trim();

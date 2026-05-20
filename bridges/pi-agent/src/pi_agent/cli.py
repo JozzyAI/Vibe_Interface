@@ -2514,7 +2514,7 @@ def run_daemon(args: argparse.Namespace) -> int:
                 force_reason="started",
             )
             log_path.write_text(screen, encoding="utf-8", errors="replace")
-            # PI_INITIAL_GOAL: clean user goal injected as /goal for Claude (no hook instructions).
+            # PI_INITIAL_GOAL: clean user prompt injected as /plan for Claude (no hook instructions).
             # PI_INITIAL_PROMPT: legacy fallback for sessions created before PI_INITIAL_GOAL existed.
             _initial_prompt = (
                 child_env.get("PI_INITIAL_GOAL", "")
@@ -2992,16 +2992,16 @@ def run_daemon(args: argparse.Namespace) -> int:
                             if _ps == "waiting_input" or (
                                 _stable >= 4.0 and _ps not in ("busy", "waiting_approval")
                             ):
-                                # For Claude sessions, inject as /goal so Claude treats the prompt
-                                # as the session objective (sets a Stop hook).  /goal takes a
-                                # single-line condition, so collapse newlines to spaces.
-                                # For Codex, keep the prompt as-is (no /goal support).
+                                # For Claude sessions, inject as /plan so Claude treats the prompt
+                                # as the session plan.  /plan takes a single-line description,
+                                # so collapse newlines to spaces.
+                                # For Codex, keep the prompt as-is (no /plan support).
                                 _is_claude = (
                                     str(job_state.get("provider") or "unknown").lower() == "claude"
                                 )
                                 if _is_claude:
                                     _goal_text = " ".join(_ip.split())
-                                    _to_send = f"/goal {_goal_text}"
+                                    _to_send = f"/plan {_goal_text}"
                                 else:
                                     _to_send = _ip
                                 if tmux_send_input(session_name, _to_send, True):
