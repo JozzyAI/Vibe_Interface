@@ -72,7 +72,14 @@ function connectionOrder(state: string): number {
   return 3; // disabled
 }
 
-function jobTone(job: RemoteAgentJob): string {
+function jobTone(job: RemoteAgentJob, pendingApprovalCount = 0): string {
+  if (
+    pendingApprovalCount > 0 ||
+    job.providerState?.state === "waiting_approval" ||
+    job.providerState?.state === "waiting_input"
+  ) {
+    return "border-[var(--color-status-attention)] text-[var(--color-status-attention)]";
+  }
   if (job.status === "running") return "border-[var(--color-status-ok)] text-[var(--color-status-ok)]";
   if (job.status === "queued") return "border-[var(--color-status-attention)] text-[var(--color-status-attention)]";
   if (job.status === "failed") return "border-[var(--color-accent-red)] text-[var(--color-accent-red)]";

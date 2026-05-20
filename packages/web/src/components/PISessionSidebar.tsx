@@ -1,5 +1,84 @@
 import type { PIApprovalHubData, RemoteAgentJob, RemoteApprovalOverview } from "@/lib/types";
 
+// Strip ANSI escape sequences so logTail pattern matching works on plain text.
+const ANSI_STRIP_RE = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)|\x1b[PX^_].*?\x1b\\|\x1b[@-_]/gs;
+function stripAnsiForStatus(s: string): string {
+  return s.replace(ANSI_STRIP_RE, "");
+}
+
+type DisplayStatus = {
+  label: string;
+  dotClass: string;
+};
+
+/**
+ * Derive a human-readable display status from a running remote job.
+ *
+ * Priority (highest to lowest):
+ *   approval needed > waiting for input > working (busy) > restart/degraded > default running
+ *
+ * Signals used:
+ *   - pendingApprovalCount from overview.requests
+ *   - job.providerState (set by pi-agent detect_provider_state hook/PTY scraping)
+ *   - job.logTail pattern matching for approval dialogs and REPL idle prompt
+ */
+function deriveRemoteJobDisplayStatus(
+  job: RemoteAgentJob,
+  pendingApprovalCount: number,
+): DisplayStatus {
+  // Terminal states — show as-is
+  if (job.status === "completed") return { label: "completed", dotClass: "bg-[#9aa1ad]" };
+  if (job.status === "failed")    return { label: "failed",    dotClass: "bg-[#e5533d]" };
+  if (job.status === "queued")    return { label: "queued",    dotClass: "bg-[#9aa1ad]" };
+
+  // Approval needed — most urgent for running sessions
+  if (
+    pendingApprovalCount > 0 ||
+    job.providerState?.state === "waiting_approval"
+  ) {
+    return { label: "approval needed", dotClass: "bg-[#d99a1b]" };
+  }
+
+  // Waiting for user input — from providerState (daemon PTY/hook scraping)
+  if (
+    job.providerState?.state === "waiting_input" &&
+    (job.providerState.confidence ?? 0) >= 0.5
+  ) {
+    return { label: "waiting for input", dotClass: "bg-[#d99a1b]" };
+  }
+
+  // Pattern matching on logTail for approval dialogs and REPL idle prompt.
+  // Only look at the last ~20 lines to avoid false positives from old output.
+  if (job.logTail) {
+    const clean = stripAnsiForStatus(job.logTail);
+    const lines = clean.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const recent = lines.slice(-20).join("\n").toLowerCase();
+
+    // Claude Code tool-approval dialogs
+    const isApproval =
+      (recent.includes("do you want to ") && recent.includes("esc to cancel")) ||
+      (recent.includes("1. yes") && recent.includes("2. yes")) ||
+      (recent.includes("1. yes") && recent.includes("3. no")) ||
+      recent.includes("do you want to proceed");
+    if (isApproval) return { label: "approval needed", dotClass: "bg-[#d99a1b]" };
+
+    // Claude REPL idle prompt ("? for shortcuts · ← for agents")
+    if (recent.includes("? for shortcuts")) {
+      return { label: "waiting for input", dotClass: "bg-[#d99a1b]" };
+    }
+  }
+
+  // Restart required / degraded
+  if (remoteJobNeedsRestart(job)) return { label: "restart required", dotClass: "bg-[#d99a1b]" };
+  if (remoteJobIsDegraded(job))   return { label: "degraded",         dotClass: "bg-[#d99a1b]" };
+
+  // Actively working
+  if (job.providerState?.state === "busy") return { label: "working", dotClass: "bg-[#25a55f]" };
+
+  // Default: running without a finer state
+  return { label: "working", dotClass: "bg-[#25a55f]" };
+}
+
 interface ProjectHubCard {
   projectId: string;
   projectName: string;
@@ -42,26 +121,6 @@ function remoteJobIsDegraded(job: RemoteAgentJob): boolean {
   return !lower.includes("gpt-5") && !lower.includes("openai codex");
 }
 
-function remoteJobIsIdle(job: RemoteAgentJob): boolean {
-  if (job.status !== "running") return false;
-  const lower = (job.logTail ?? "").toLowerCase();
-  if (!lower.includes("gpt-5") && !lower.includes("openai codex")) return false;
-  const recent = lower
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(-8)
-    .join("\n");
-  return recent.includes("gpt-5") && !recent.includes("thinking");
-}
-
-function statusDot(status: string, pendingApprovalCount = 0): string {
-  if (pendingApprovalCount > 0 || status.includes("awaiting")) return "bg-[#d99a1b]";
-  if (status === "restart required" || status === "degraded") return "bg-[#d99a1b]";
-  if (status === "running" || status === "queued" || status === "working") return "bg-[#25a55f]";
-  if (status === "failed" || status === "disconnected") return "bg-[#e5533d]";
-  return "bg-[#9aa1ad]";
-}
 
 export function getPISessionSidebarCount(cards: ProjectHubCard[], remoteOverview: RemoteApprovalOverview): number {
   return remoteOverview.jobs.length + cards.reduce((count, card) => count + card.hub.fleet.length, 0);
@@ -70,21 +129,16 @@ export function getPISessionSidebarCount(cards: ProjectHubCard[], remoteOverview
 export function PISessionSidebar({ cards, remoteOverview, activeHref }: Props) {
   const remoteSessionItems = remoteOverview.jobs.map((job) => {
     const href = `/remote-sessions/${encodeURIComponent(job.jobId)}`;
-    const status = remoteJobNeedsRestart(job)
-      ? "restart required"
-      : remoteJobIsDegraded(job)
-        ? "degraded"
-        : remoteJobIsIdle(job)
-          ? "idle"
-          : job.status;
+    const pendingApprovalCount = remoteOverview.requests.filter(
+      (request) => request.agentId === job.agentId && request.status === "open",
+    ).length;
+    const displayStatus = deriveRemoteJobDisplayStatus(job, pendingApprovalCount);
     return {
       key: `remote-${job.jobId}`,
       title: humanRemoteJobTitle(job),
-      subtitle: `${shortRemoteJobId(job.jobId)} - ${status} - ${formatRelativeTime(job.updatedAt)}`,
-      status,
-      pendingApprovalCount: remoteOverview.requests.filter(
-        (request) => request.agentId === job.agentId && request.status === "open",
-      ).length,
+      subtitle: `${shortRemoteJobId(job.jobId)} · ${displayStatus.label} · ${formatRelativeTime(job.updatedAt)}`,
+      dotClass: displayStatus.dotClass,
+      pendingApprovalCount,
       href,
       updatedAt: job.updatedAt,
     };
@@ -92,11 +146,20 @@ export function PISessionSidebar({ cards, remoteOverview, activeHref }: Props) {
   const aoSessionItems = cards.flatMap((card) =>
     card.hub.fleet.map((session) => {
       const href = `/sessions/${encodeURIComponent(session.sessionId)}?project=${encodeURIComponent(card.projectId)}`;
+      const piStatus = session.piState ?? session.status;
+      const piDotClass =
+        session.pendingApprovalCount > 0
+          ? "bg-[#d99a1b]"
+          : piStatus === "working" || piStatus === "running"
+            ? "bg-[#25a55f]"
+            : piStatus === "errored" || piStatus === "failed"
+              ? "bg-[#e5533d]"
+              : "bg-[#9aa1ad]";
       return {
         key: `pi-${session.sessionId}`,
         title: session.sessionTitle,
-        subtitle: `${session.status} - ${formatRelativeTime(session.lastActivityAt)}`,
-        status: session.piState ?? session.status,
+        subtitle: `${piStatus} · ${formatRelativeTime(session.lastActivityAt)}`,
+        dotClass: piDotClass,
         pendingApprovalCount: session.pendingApprovalCount,
         href,
         updatedAt: session.lastActivityAt,
@@ -142,7 +205,7 @@ export function PISessionSidebar({ cards, remoteOverview, activeHref }: Props) {
               >
                 <div className="flex items-start gap-3">
                   <span
-                    className={`mt-1.5 h-2.5 w-2.5 rounded-full ${statusDot(item.status, item.pendingApprovalCount)}`}
+                    className={`mt-1.5 h-2.5 w-2.5 rounded-full ${item.dotClass}`}
                   />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[14px] font-semibold text-[#25272d]">
