@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
-import { updateRemoteAgentJobSettings } from "@/lib/remote-agents";
+import { getRemoteAgentsBackend } from "@/lib/backend";
 
 export async function PATCH(
   request: NextRequest,
@@ -17,6 +17,7 @@ export async function PATCH(
       model?: string | null;
       reasoningEffort?: string | null;
     };
+    const { updateRemoteAgentJobSettings } = await getRemoteAgentsBackend();
     const job = await updateRemoteAgentJobSettings({
       jobId: id,
       agentId: body.agentId,

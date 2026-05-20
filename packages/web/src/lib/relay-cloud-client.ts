@@ -47,6 +47,21 @@ async function piGet<T>(path: string): Promise<T> {
   return json;
 }
 
+async function piPatch<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${relayBase()}${path}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${piToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
+  const json = await res.json() as { error?: string } & T;
+  if (!res.ok) throw new Error(json.error ?? `Relay request failed (${res.status})`);
+  return json;
+}
+
 // ── Overview ──────────────────────────────────────────────────────────────────
 
 export async function getRemoteApprovalOverview(): Promise<RemoteApprovalOverview> {
@@ -138,6 +153,20 @@ export async function removeRemoteAgentJob(input: { jobId: string; agentId?: str
     `/v1/pi/jobs/${encodeURIComponent(input.jobId)}/delete`,
     { agentId: input.agentId },
   );
+}
+
+export async function updateRemoteAgentJobSettings(input: {
+  jobId: string;
+  agentId?: string;
+  ralphEnabled?: boolean;
+  autoResumeUsageLimit?: boolean;
+  autoRestartCodex?: boolean;
+  model?: string | null;
+  reasoningEffort?: string | null;
+}): Promise<RemoteAgentJob> {
+  const { jobId, ...rest } = input;
+  const result = await piPatch<{ job: RemoteAgentJob }>(`/v1/pi/jobs/${encodeURIComponent(jobId)}`, rest);
+  return result.job;
 }
 
 export async function restartRemoteAgentJob(input: { jobId: string; agentId?: string }): Promise<RemoteAgentJob> {

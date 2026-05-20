@@ -1253,7 +1253,14 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
       setOverview(nextOverview);
       return nextOverview;
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Failed to update model settings");
+      const msg = nextError instanceof Error ? nextError.message : "Failed to update model settings";
+      // In cloud mode the relay may not support persisting job settings.
+      // The selected settings are kept in form state and will be used by Save and restart.
+      if (msg.includes("Unknown remote agent job") || msg.includes("Relay request failed")) {
+        setError("Settings could not be saved to the server. They are still selected — click 'Save and restart' to create a new session with these settings.");
+      } else {
+        setError(msg);
+      }
       return null;
     } finally {
       setUpdatingSetting(null);
@@ -1265,15 +1272,55 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
     setIsRestarting(true);
     setError(null);
     try {
-      await updateModelSettings();
-      const response = await requestJson<{ job: RemoteAgentJob }>(
-        `/api/remote-agents/jobs/${encodeURIComponent(job.jobId)}/restart`,
-        {
-          method: "POST",
-          body: JSON.stringify({ agentId: agent.agentId }),
-        },
-      );
-      window.location.href = `/remote-sessions/${encodeURIComponent(response.job.jobId)}`;
+      const effectiveModel = selectedModel === "__custom" ? customModel.trim() : selectedModel;
+
+      if (isClaudeJob) {
+        // Save model/reasoning to the existing job record first (best-effort).
+        await requestJson(`/api/remote-agents/jobs/${encodeURIComponent(job.jobId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            agentId: agent.agentId,
+            model: effectiveModel || null,
+            reasoningEffort: selectedReasoningEffort || null,
+          }),
+        }).catch(() => {
+          // In cloud mode the PATCH may fail if the job isn't in local store.
+          // Proceed anyway — the new job will use the selected model.
+        });
+
+        // Create a new Claude job with the updated model via the normal creation
+        // endpoint, which properly dispatches through relay in cloud mode.
+        const cwd = job.cwd ?? agent.worktree ?? agent.repoRoot;
+        if (!cwd) throw new Error("No working directory available for restart");
+        const response = await requestJson<{ job: RemoteAgentJob }>(
+          "/api/remote-agents/jobs",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              agentId: job.agentId,
+              provider: "claude",
+              cwd,
+              model: effectiveModel || undefined,
+              reasoningEffort: selectedReasoningEffort || undefined,
+              title: `Fresh: ${job.title.replace(/^Fresh: /i, "").slice(0, 80)}`,
+              ralphEnabled: job.ralphEnabled,
+              autoResumeUsageLimit: job.autoResumeUsageLimit,
+            }),
+          },
+        );
+        window.location.href = `/remote-sessions/${encodeURIComponent(response.job.jobId)}`;
+      } else {
+        // Codex: save model settings then use the Codex-specific restart endpoint.
+        await updateModelSettings();
+        const response = await requestJson<{ job: RemoteAgentJob }>(
+          `/api/remote-agents/jobs/${encodeURIComponent(job.jobId)}/restart`,
+          {
+            method: "POST",
+            body: JSON.stringify({ agentId: agent.agentId }),
+          },
+        );
+        window.location.href = `/remote-sessions/${encodeURIComponent(response.job.jobId)}`;
+      }
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Failed to restart with saved model");
       setIsRestarting(false);
@@ -1363,21 +1410,43 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
 
   const restartFresh = async () => {
     if (!job || !agent) return;
-    const confirmed = window.confirm(
-      "Start a fresh Codex process for this session? This does not resume the old Codex conversation.",
-    );
-    if (!confirmed) return;
     setIsRestarting(true);
     setError(null);
     try {
-      const response = await requestJson<{ job: RemoteAgentJob }>(
-        `/api/remote-agents/jobs/${encodeURIComponent(job.jobId)}/restart`,
-        {
-          method: "POST",
-          body: JSON.stringify({ agentId: agent.agentId, fresh: true }),
-        },
-      );
-      window.location.href = `/remote-sessions/${encodeURIComponent(response.job.jobId)}`;
+      if (isClaudeJob) {
+        // Claude: create a brand-new job using the same agent/cwd/model.
+        // The jobs POST route uses getRemoteAgentsBackend() so it works in both
+        // local and cloud/relay mode. Never call the Codex-only restart endpoint.
+        const cwd = job.cwd ?? agent.worktree ?? agent.repoRoot;
+        if (!cwd) throw new Error("No working directory available for fresh restart");
+        const response = await requestJson<{ job: RemoteAgentJob }>(
+          "/api/remote-agents/jobs",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              agentId: job.agentId,
+              provider: "claude",
+              cwd,
+              model: job.model ?? undefined,
+              reasoningEffort: job.reasoningEffort ?? undefined,
+              title: `Fresh: ${job.title.replace(/^Fresh: /i, "").slice(0, 80)}`,
+              ralphEnabled: job.ralphEnabled,
+              autoResumeUsageLimit: job.autoResumeUsageLimit,
+            }),
+          },
+        );
+        window.location.href = `/remote-sessions/${encodeURIComponent(response.job.jobId)}`;
+      } else {
+        // Codex: resume-less fresh restart via the restart endpoint.
+        const response = await requestJson<{ job: RemoteAgentJob }>(
+          `/api/remote-agents/jobs/${encodeURIComponent(job.jobId)}/restart`,
+          {
+            method: "POST",
+            body: JSON.stringify({ agentId: agent.agentId, fresh: true }),
+          },
+        );
+        window.location.href = `/remote-sessions/${encodeURIComponent(response.job.jobId)}`;
+      }
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Failed to start fresh session");
       setIsRestarting(false);
@@ -1480,22 +1549,42 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
           type="button"
           disabled={
             isRestartingDaemon ||
+            job.status !== "running" ||
+            !job.tmuxSession ||
             agent.connectionState === "disabled" ||
             agent.connectionState === "disconnected"
+          }
+          title={
+            job.status !== "running"
+              ? "Session has ended — use Fresh restart to start a new session"
+              : !job.tmuxSession
+                ? "No live terminal session to reconnect to"
+                : undefined
           }
           onClick={() => void restartDaemon()}
           className="mt-3 w-full rounded-full border border-[#e4e4e0] bg-white px-3 py-2 text-[12px] font-semibold text-[#444852] hover:border-[var(--color-status-attention)] hover:text-[var(--color-status-attention)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isRestartingDaemon ? "Restarting daemon..." : "Restart connection"}
         </button>
+        {job.status !== "running" ? (
+          <p className="mt-1 text-[11px] leading-4 text-[#8a909b]">
+            Session ended — use Fresh restart to start a new session below.
+          </p>
+        ) : null}
         <button
           type="button"
-          disabled={isRestarting || !isCodexJob}
+          disabled={isRestarting}
           onClick={() => void restartFresh()}
           className="mt-2 w-full rounded-full border border-[#e4e4e0] bg-white px-3 py-2 text-[12px] font-semibold text-[#444852] hover:border-[#5964d8] hover:text-[#5964d8] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isRestarting ? "Starting..." : "Fresh restart session"}
         </button>
+
+        {error ? (
+          <div className="mt-3 rounded-2xl border border-[var(--color-accent-red)]/40 bg-[var(--color-accent-red-soft)] p-3 text-[12px] text-[var(--color-accent-red)]">
+            {error}
+          </div>
+        ) : null}
 
         {SHOW_HANDOFF_CONTROLS ? (
         <div className="mt-4 rounded-2xl border border-[#e4e4e0] bg-white p-3">
@@ -1665,12 +1754,6 @@ export function PIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
             >
               {isRestarting ? "Restarting..." : "Restart and resume"}
             </button>
-          </div>
-        ) : null}
-
-        {error ? (
-          <div className="mt-4 rounded-2xl border border-[var(--color-accent-red)]/40 bg-[var(--color-accent-red-soft)] p-3 text-[12px] text-[var(--color-accent-red)]">
-            {error}
           </div>
         ) : null}
 
