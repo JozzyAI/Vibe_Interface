@@ -3,19 +3,22 @@
 # Tested on Debian 12 (bookworm) — the GCP default image.
 #
 # Usage:
-#   sudo bash vm-init.sh <domain> <vi-relay-token> <vi-relay-admin-token> [disk-device]
+#   sudo bash vm-init.sh <domain> <vi-token> <daemon-token> [disk-device]
+#
+#   vi-token    — dashboard auth token (VI_RELAY_VI_TOKEN in .env.local)
+#   daemon-token — vi-agent daemon token (VI_RELAY_DAEMON_TOKEN in .env.local)
 #
 # Example:
-#   sudo bash vm-init.sh relay.dynastylab.ai tok_abc123 adm_xyz789 /dev/sdb
+#   sudo bash vm-init.sh relay.dynastylab.ai tok_abc123 daemon_xyz789 /dev/sdb
 #
 # After this script completes the relay is live at https://<domain>.
 # To update after a code change: sudo bash deploy-update.sh
 
 set -euo pipefail
 
-DOMAIN="${1:?Usage: $0 <domain> <vi-relay-token> <vi-relay-admin-token> [disk-device]}"
-VI_RELAY_TOKEN="${2:?Missing vi-relay-token}"
-VI_RELAY_ADMIN_TOKEN="${3:?Missing vi-relay-admin-token}"
+DOMAIN="${1:?Usage: $0 <domain> <vi-token> <daemon-token> [disk-device]}"
+VI_TOKEN="${2:?Missing vi-token (dashboard token)}"
+DAEMON_TOKEN="${3:?Missing daemon-token}"
 DATA_DISK="${4:-/dev/sdb}"
 DATA_MOUNT="/data"
 REPO_DIR="/opt/vi"
@@ -60,8 +63,12 @@ cat > /etc/vi-relay.env <<ENV
 VI_RELAY_PORT=8787
 VI_RELAY_HOST=0.0.0.0
 VI_RELAY_DB_PATH=/data/vi-relay.db
-VI_RELAY_TOKEN=${VI_RELAY_TOKEN}
-VI_RELAY_ADMIN_TOKEN=${VI_RELAY_ADMIN_TOKEN}
+VI_RELAY_TOKENS=${VI_TOKEN}:vi:dashboard,${DAEMON_TOKEN}:daemon:daemon
+VI_RELAY_VI_TOKEN=${VI_TOKEN}
+VI_RELAY_OWNER_TOKEN=${VI_TOKEN}
+VI_RELAY_DAEMON_TOKEN=${DAEMON_TOKEN}
+VI_RELAY_BASE_URL=https://${DOMAIN}
+VI_RELAY_PUBLIC_WS_URL=wss://${DOMAIN}
 ENV
 chmod 600 /etc/vi-relay.env
 
@@ -104,8 +111,15 @@ certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "admin@${DOMAIN}"
 
 echo ""
 echo "VI relay is live at https://$DOMAIN"
-echo "Set in dashboard .env.local:   VI_SERVER=https://$DOMAIN"
-echo "Set in vi-agent config:        VI_SERVER=https://$DOMAIN"
+echo "Add to dashboard .env.local:"
+echo "  VI_RELAY_BASE_URL=https://$DOMAIN"
+echo "  VI_RELAY_PUBLIC_WS_URL=wss://$DOMAIN"
+echo "  VI_RELAY_VI_TOKEN=<your vi-token>"
+echo "  VI_RELAY_DAEMON_TOKEN=<your daemon-token>"
+echo ""
+echo "Add to vi-agent env:"
+echo "  VI_SERVER=https://$DOMAIN"
+echo "  VI_RELAY_TOKEN=<your daemon-token>"
 echo ""
 echo "When ready, shut down Fly.io:"
 echo "  fly apps destroy vi-relay-jozzy"
