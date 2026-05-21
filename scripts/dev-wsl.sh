@@ -28,7 +28,7 @@ tmux send-keys -l -t "$SESSION_NEXT" "PATH=$PATH ./node_modules/.bin/next dev -p
 tmux send-keys -t "$SESSION_NEXT" C-m
 
 tmux new-session -d -s "$SESSION_WS" -c "$WEB_DIR"
-tmux send-keys -l -t "$SESSION_WS" "PATH=$PATH ./node_modules/.bin/tsx watch server/direct-terminal-ws.ts"
+tmux send-keys -l -t "$SESSION_WS" "PATH=$PATH node --env-file=.env.local --import tsx/esm --watch server/direct-terminal-ws.ts"
 tmux send-keys -t "$SESSION_WS" C-m
 
 ip_addr="$(ip addr show eth0 | awk '/inet / {print $2}' | cut -d/ -f1 | head -n 1)"
