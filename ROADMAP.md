@@ -1,8 +1,8 @@
-# PI Roadmap
+# VI Roadmap
 
 ## Product Overview
 
-PI is a multi-user remote agent management platform with three core components:
+VI is a multi-user remote agent management platform with three core components:
 
 ```
 [vi-agent] ──connects──► [relay / GCP] ◄──polls── [dashboard]

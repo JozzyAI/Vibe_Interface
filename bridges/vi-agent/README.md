@@ -63,15 +63,15 @@ vi-agent cleanup --state-file ~/.config/vi-agent/<project>-agent-<name>.json
 
 | Command | Description |
 |---------|-------------|
-| `pair` | Connect to PI with a one-time enrollment code |
+| `pair` | Connect to VI with a one-time enrollment code |
 | `status` | Print daemon PID, state file path, and running status |
 | `context` | Print current agent identity as JSON |
 | `run` | Run a wrapped command as a managed remote job |
 | `claude` | Launch Claude Code as a managed remote job |
 | `codex` | Launch Codex CLI as a managed remote job |
-| `request-approval` | Send an approval request to PI and wait for a response |
+| `request-approval` | Send an approval request to VI and wait for a response |
 | `approve-command` | Wrap a risky command behind a VI approval gate |
-| `handoff-update` | Update the session handoff context in PI |
+| `handoff-update` | Update the session handoff context in VI |
 
 ---
 

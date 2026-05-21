@@ -1,6 +1,6 @@
-# PI Cloud Control Plane
+# VI Cloud Control Plane
 
-PI supports two operating modes. Both use the same dashboard UI and the same vi-agent binary — only the environment variables differ.
+VI supports two operating modes. Both use the same dashboard UI and the same vi-agent binary — only the environment variables differ.
 
 ## Live deployment
 

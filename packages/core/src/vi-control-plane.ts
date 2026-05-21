@@ -177,7 +177,7 @@ function defaultSummary(session: VISession, piState: VISessionState): string {
     `# ${session.id}`,
     "",
     `- Project: ${session.projectId}`,
-    `- PI state: ${piState}`,
+    `- VI state: ${piState}`,
     `- Status: ${session.status}`,
     `- Branch: ${session.branch ?? "not created yet"}`,
     `- Issue: ${session.issueId ?? "ad-hoc task"}`,
@@ -213,7 +213,7 @@ function defaultExecutionState(session: VISession, piState: VISessionState): VIE
       session.metadata["summary"] ??
       session.metadata["userPrompt"] ??
       "Continue current execution.",
-    lastUpdate: `PI status ${session.status}`,
+    lastUpdate: `VI status ${session.status}`,
     nextSuggestedAction:
       piState === "awaiting_user_input" || piState === "awaiting_approval"
         ? "Reply from the VI dashboard and send context back to the session."
@@ -650,7 +650,7 @@ export function createVIIdeaPlan(input: VIIdeaInput): VIIdeaPlan {
           description,
           "",
           "Deliverables:",
-          "- Capture the idea through PI intake.",
+          "- Capture the idea through VI intake.",
           "- Expand it into GitHub-ready issues and labels.",
           "- Feed created issues into the backlog.",
         ].join("\n"),
@@ -680,7 +680,7 @@ export function createVIIdeaPlan(input: VIIdeaInput): VIIdeaPlan {
           `Source idea: ${title}`,
           "",
           "Deliverables:",
-          "- Surface pending questions and approvals in the PI inbox.",
+          "- Surface pending questions and approvals in the VI inbox.",
           "- Persist session handoff files for restore.",
           "- Expose restore and review-ready actions in the dashboard.",
         ].join("\n"),

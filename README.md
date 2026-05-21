@@ -1,6 +1,6 @@
-# Vibe Interface (PI)
+# Vibe Interface (VI)
 
-PI is a multi-agent coding operations dashboard. It gives you one place to launch AI coding sessions (Claude Code, Codex CLI), watch live terminals, handle approval requests, and manage many machines — from any browser.
+VI is a multi-agent coding operations dashboard. It gives you one place to launch AI coding sessions (Claude Code, Codex CLI), watch live terminals, handle approval requests, and manage many machines — from any browser.
 
 - **Dashboard** — Next.js web UI. Shows machines, sessions, approvals.
 - **vi-agent** — Python daemon. Runs on any machine. Launches agents, streams terminal, polls for jobs.
@@ -175,7 +175,7 @@ Run it on any machine — it does not need to be on the same network as the dash
 ### Install
 
 ```bash
-# From the PI repo (editable install — picks up local changes)
+# From the VI repo (editable install — picks up local changes)
 pip install -e bridges/vi-agent
 
 # Verify
@@ -337,7 +337,7 @@ After rotation, re-pair all vi-agents — their stored daemon token is now inval
 ## Troubleshooting
 
 **Dashboard shows 0 machines but API has agents**  
-Check `VI_RELAY_BASE_URL` and `VI_RELAY_VI_TOKEN` in `.env.local`. The sidebar shows **Cloud · connected** when cloud mode is active. If it shows **auth failed**, the PI token is wrong or the relay hasn't restarted yet after a secrets change.
+Check `VI_RELAY_BASE_URL` and `VI_RELAY_VI_TOKEN` in `.env.local`. The sidebar shows **Cloud · connected** when cloud mode is active. If it shows **auth failed**, the VI token is wrong or the relay hasn't restarted yet after a secrets change.
 
 **Pair command points to wrong URL**  
 Local mode: set `VI_PUBLIC_URL=http://<your-lan-ip>:3000` in `.env.local`.  
@@ -355,7 +355,7 @@ Enrollment codes expire (default 60 minutes) and are single-use. Generate a new 
 Check the tmux session exists: `tmux list-sessions`. If the job exited, check `~/.config/vi-agent/jobs/<jobId>.log`.
 
 **Text selection / copy does not work in terminal**  
-Do not enable `tmux set-option mouse on` for PI sessions. With mouse on, drag events route to the PTY and selection disappears on mouseup. PI sets `mouse off` by default — do not override it.
+Do not enable `tmux set-option mouse on` for VI sessions. With mouse on, drag events route to the PTY and selection disappears on mouseup. VI sets `mouse off` by default — do not override it.
 
 **Claude model "deployment not found"**  
 Set `VI_CLAUDE_DEFAULT_MODEL=claude-sonnet-4-6` in `.env.local`. Do not use shell aliases — vi-agent launches Claude via subprocess and aliases are never expanded.
@@ -419,7 +419,7 @@ Project_Interface/
 │   └── cloud-control-plane.md  Cloud relay setup and token rotation runbook
 ├── packages/
 │   ├── core/               Shared TypeScript types
-│   ├── relay/              PI Cloud relay (SQLite control plane + WebSocket)
+│   ├── relay/              VI Cloud relay (SQLite control plane + WebSocket)
 │   └── web/                Next.js dashboard
 ├── AGENT_LAUNCH.md         How agent sessions are launched
 ├── ROADMAP.md              Product roadmap

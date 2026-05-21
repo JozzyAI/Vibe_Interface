@@ -1,7 +1,7 @@
 /**
  * relay-cloud-client.ts
  *
- * Dashboard HTTP client for PI Cloud relay /v1/pi/* routes.
+ * Dashboard HTTP client for VI Cloud relay /v1/vi/* routes.
  * Activated when VI_RELAY_BASE_URL + VI_RELAY_VI_TOKEN are set.
  * Returns the same TypeScript shapes as remote-agents.ts so all API routes
  * and UI components work without changes.
@@ -65,7 +65,7 @@ async function viPatch<T>(path: string, body?: unknown): Promise<T> {
 // ── Overview ──────────────────────────────────────────────────────────────────
 
 export async function getRemoteApprovalOverview(): Promise<RemoteApprovalOverview> {
-  return piGet<RemoteApprovalOverview>("/v1/pi/overview");
+  return piGet<RemoteApprovalOverview>("/v1/vi/overview");
 }
 
 // ── Agents (dashboard-side operations only) ───────────────────────────────────
@@ -76,7 +76,7 @@ export async function getRemoteApprovalOverview(): Promise<RemoteApprovalOvervie
 // ── Enrollments ───────────────────────────────────────────────────────────────
 
 export async function getEnrollments() {
-  return piGet<{ enrollments: unknown[]; recentEnrollments: unknown[] }>("/v1/pi/enrollments");
+  return piGet<{ enrollments: unknown[]; recentEnrollments: unknown[] }>("/v1/vi/enrollments");
 }
 
 export async function createRemoteEnrollment(input: {
@@ -87,7 +87,7 @@ export async function createRemoteEnrollment(input: {
     pairCommand?: string;
     advancedCommand?: string;
     relayUrl?: string;
-  }>("/v1/pi/enrollments", input);
+  }>("/v1/vi/enrollments", input);
   return { ...result.enrollment, pairCommand: result.pairCommand, advancedCommand: result.advancedCommand, relayUrl: result.relayUrl };
 }
 
@@ -116,7 +116,7 @@ export async function consumeRemoteEnrollment(input: { code: string }): Promise<
 
 export async function revokeRemoteEnrollment(input: { enrollmentId: string }): Promise<RemoteEnrollmentSummary> {
   const result = await piPost<{ enrollment: RemoteEnrollmentSummary }>(
-    `/v1/pi/enrollments/${encodeURIComponent(input.enrollmentId)}/revoke`,
+    `/v1/vi/enrollments/${encodeURIComponent(input.enrollmentId)}/revoke`,
   );
   return result.enrollment;
 }
@@ -124,7 +124,7 @@ export async function revokeRemoteEnrollment(input: { enrollmentId: string }): P
 export async function createReconnectEnrollment(agentId: string): Promise<{
   enrollment: RemoteEnrollmentSummary; pairCommand: string; advancedCommand: string; relayUrl: string;
 }> {
-  return piPost(`/v1/pi/agents/${encodeURIComponent(agentId)}/reconnect`);
+  return piPost(`/v1/vi/agents/${encodeURIComponent(agentId)}/reconnect`);
 }
 
 // ── Jobs ──────────────────────────────────────────────────────────────────────
@@ -136,13 +136,13 @@ export async function createRemoteAgentJob(input: {
   reasoningEffort?: string | null; ralphEnabled?: boolean;
   autoResumeUsageLimit?: boolean; autoRestartCodex?: boolean;
 }): Promise<RemoteAgentJob> {
-  const result = await piPost<{ job: RemoteAgentJob; relayDispatch: unknown }>("/v1/pi/jobs", input);
+  const result = await piPost<{ job: RemoteAgentJob; relayDispatch: unknown }>("/v1/vi/jobs", input);
   return result.job;
 }
 
 export async function archiveRemoteAgentJob(input: { jobId: string; agentId?: string }): Promise<RemoteAgentJob> {
   const result = await piPost<{ job: RemoteAgentJob }>(
-    `/v1/pi/jobs/${encodeURIComponent(input.jobId)}/archive`,
+    `/v1/vi/jobs/${encodeURIComponent(input.jobId)}/archive`,
     { agentId: input.agentId },
   );
   return result.job;
@@ -150,7 +150,7 @@ export async function archiveRemoteAgentJob(input: { jobId: string; agentId?: st
 
 export async function removeRemoteAgentJob(input: { jobId: string; agentId?: string }) {
   return piPost<{ removed: boolean; removedJobIds: string[] }>(
-    `/v1/pi/jobs/${encodeURIComponent(input.jobId)}/delete`,
+    `/v1/vi/jobs/${encodeURIComponent(input.jobId)}/delete`,
     { agentId: input.agentId },
   );
 }
@@ -165,13 +165,13 @@ export async function updateRemoteAgentJobSettings(input: {
   reasoningEffort?: string | null;
 }): Promise<RemoteAgentJob> {
   const { jobId, ...rest } = input;
-  const result = await viPatch<{ job: RemoteAgentJob }>(`/v1/pi/jobs/${encodeURIComponent(jobId)}`, rest);
+  const result = await viPatch<{ job: RemoteAgentJob }>(`/v1/vi/jobs/${encodeURIComponent(jobId)}`, rest);
   return result.job;
 }
 
 export async function restartRemoteAgentJob(input: { jobId: string; agentId?: string }): Promise<RemoteAgentJob> {
   const result = await piPost<{ job: RemoteAgentJob; relayDispatch: unknown }>(
-    `/v1/pi/jobs/${encodeURIComponent(input.jobId)}/restart`,
+    `/v1/vi/jobs/${encodeURIComponent(input.jobId)}/restart`,
     { agentId: input.agentId },
   );
   return result.job;
@@ -192,7 +192,7 @@ export async function createRemoteApprovalRequest(input: {
   eventType?: RemoteApprovalRequest["eventType"];
   primaryAction?: RemoteApprovalRequest["primaryAction"];
 }): Promise<RemoteApprovalRequest> {
-  const result = await piPost<{ approvalRequest: RemoteApprovalRequest }>("/v1/pi/approvals", input);
+  const result = await piPost<{ approvalRequest: RemoteApprovalRequest }>("/v1/vi/approvals", input);
   return result.approvalRequest;
 }
 
@@ -200,7 +200,7 @@ export async function respondToRemoteApproval(input: {
   requestId: string; action: "approve" | "reject"; response?: string;
 }): Promise<RemoteApprovalRequest> {
   const result = await piPost<{ approvalRequest: RemoteApprovalRequest; relayDispatch: unknown }>(
-    `/v1/pi/approvals/${encodeURIComponent(input.requestId)}/respond`,
+    `/v1/vi/approvals/${encodeURIComponent(input.requestId)}/respond`,
     { action: input.action, response: input.response },
   );
   return result.approvalRequest;
@@ -208,14 +208,14 @@ export async function respondToRemoteApproval(input: {
 
 export async function dispatchRelayApprovalDecision(agentId: string, request: unknown) {
   return piPost<{ delivered: boolean; targetPeerId: string }>(
-    "/v1/pi/approval-decisions",
+    "/v1/vi/approval-decisions",
     { agentId, request },
   );
 }
 
 export async function dispatchRelayJob(agentId: string, job: unknown) {
   return piPost<{ delivered: boolean; targetPeerId: string }>(
-    "/v1/pi/jobs/dispatch",
+    "/v1/vi/jobs/dispatch",
     { agentId, job },
   );
 }
@@ -224,12 +224,12 @@ export async function dispatchRelayJob(agentId: string, job: unknown) {
 
 export async function removeRemoteAgent(input: { agentId: string }) {
   return piPost<{ removed: boolean }>(
-    `/v1/pi/agents/${encodeURIComponent(input.agentId)}/remove`,
+    `/v1/vi/agents/${encodeURIComponent(input.agentId)}/remove`,
   );
 }
 
 export async function requestRemoteAgentDaemonRestart(agentId: string) {
   return piPost<{ command: unknown }>(
-    `/v1/pi/agents/${encodeURIComponent(agentId)}/restart-daemon`,
+    `/v1/vi/agents/${encodeURIComponent(agentId)}/restart-daemon`,
   );
 }

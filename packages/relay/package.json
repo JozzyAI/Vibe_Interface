@@ -2,7 +2,7 @@
   "name": "@vi/relay",
   "version": "0.1.0",
   "private": true,
-  "description": "Relay service for remote PI agents",
+  "description": "Relay service for remote VI agents",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",

@@ -1,5 +1,5 @@
 /**
- * PI Cloud Control Plane — store layer.
+ * VI Cloud Control Plane — store layer.
  *
  * All read/write operations against the SQLite DB.
  * Returns plain objects whose shapes match the existing dashboard wire format

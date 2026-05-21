@@ -10,7 +10,7 @@ WEB_PORT="${VI_WEB_PORT:-3000}"
 PATH="$NODE_BIN:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 if [[ ! -d "$WEB_DIR" ]]; then
-  echo "PI web directory not found: $WEB_DIR" >&2
+  echo "VI web directory not found: $WEB_DIR" >&2
   exit 1
 fi
 

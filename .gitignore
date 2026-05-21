@@ -13,7 +13,7 @@ dist-server/
 node_modules/
 *.tsbuildinfo
 
-# PI runtime data
+# VI runtime data
 pi-remote-agents/
 
 # Local environment and personal config
@@ -32,3 +32,6 @@ Thumbs.db
 # Private planning notes
 _private_notes/
 .local_notes/
+
+# Python build artifacts
+*.egg-info/

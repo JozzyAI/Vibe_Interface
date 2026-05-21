@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Remote agent client for Vibe Interface"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "PI" }]
+authors = [{ name = "VI" }]
 dependencies = ["websocket-client>=1.8.0"]
 
 [project.scripts]

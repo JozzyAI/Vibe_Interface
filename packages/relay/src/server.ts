@@ -101,7 +101,7 @@ export function createRelayServer(): RelayServer {
     if (pathname === "/presence") {
       const token = extractBearerToken(req.headers.authorization);
       if (!token || !authorizeRelayToken(tokens, token, "vi")) {
-        jsonResponse(res, 401, httpError("unauthorized", "Missing or invalid PI token."));
+        jsonResponse(res, 401, httpError("unauthorized", "Missing or invalid VI token."));
         return;
       }
       jsonResponse(res, 200, { peers: registry.listPeers() });
@@ -253,9 +253,9 @@ export function createRelayServer(): RelayServer {
       }
     }
 
-    // ── PI / dashboard routes (/v1/pi/*) ───────────────────────────────────
+    // ── PI / dashboard routes (/v1/vi/*) ───────────────────────────────────
     // Called by dashboard client. Auth: pi token.
-    if (pathname.startsWith("/v1/pi/")) {
+    if (pathname.startsWith("/v1/vi/")) {
       const token = extractBearerToken(req.headers.authorization);
       if (!token) {
         jsonResponse(res, 401, httpError("unauthorized", "Missing bearer token."));
@@ -263,19 +263,19 @@ export function createRelayServer(): RelayServer {
       }
       const authorized = authorizeRelayToken(tokens, token, "vi");
       if (!authorized) {
-        jsonResponse(res, 403, httpError("forbidden", "Invalid PI token."));
+        jsonResponse(res, 403, httpError("forbidden", "Invalid VI token."));
         return;
       }
 
       try {
         // overview
-        if (pathname === "/v1/pi/overview" && req.method === "GET") {
+        if (pathname === "/v1/vi/overview" && req.method === "GET") {
           jsonResponse(res, 200, store.getOverview());
           return;
         }
 
         // enrollments list
-        if (pathname === "/v1/pi/enrollments" && req.method === "GET") {
+        if (pathname === "/v1/vi/enrollments" && req.method === "GET") {
           jsonResponse(res, 200, {
             enrollments: store.listActiveEnrollments(),
             recentEnrollments: store.listRecentEnrollments(),
@@ -284,7 +284,7 @@ export function createRelayServer(): RelayServer {
         }
 
         // create enrollment
-        if (pathname === "/v1/pi/enrollments" && req.method === "POST") {
+        if (pathname === "/v1/vi/enrollments" && req.method === "POST") {
           const body = await readJsonBody(req) as Record<string, unknown>;
           const result = store.createEnrollmentWithPairCommand({
             displayName: String(body["displayName"] ?? ""),
@@ -306,7 +306,7 @@ export function createRelayServer(): RelayServer {
         }
 
         // create job
-        if (pathname === "/v1/pi/jobs" && req.method === "POST") {
+        if (pathname === "/v1/vi/jobs" && req.method === "POST") {
           const body = await readJsonBody(req) as Record<string, unknown>;
           const job = store.createJob({
             agentId: String(body["agentId"] ?? ""),
@@ -401,7 +401,7 @@ export function createRelayServer(): RelayServer {
         }
 
         // Existing dispatch routes (kept for compat with dashboard relay-dispatch.ts)
-        if (pathname === "/v1/pi/approval-decisions" && req.method === "POST") {
+        if (pathname === "/v1/vi/approval-decisions" && req.method === "POST") {
           const body = (await readJsonBody(req)) as { agentId?: string; request?: unknown };
           const agentId = typeof body.agentId === "string" ? body.agentId : null;
           if (!agentId) { jsonResponse(res, 400, httpError("invalid_payload", "Missing agentId.")); return; }
@@ -409,7 +409,7 @@ export function createRelayServer(): RelayServer {
           return;
         }
 
-        if (pathname === "/v1/pi/jobs/dispatch" && req.method === "POST") {
+        if (pathname === "/v1/vi/jobs/dispatch" && req.method === "POST") {
           const body = (await readJsonBody(req)) as { agentId?: string; job?: unknown };
           const agentId = typeof body.agentId === "string" ? body.agentId : null;
           if (!agentId) { jsonResponse(res, 400, httpError("invalid_payload", "Missing agentId.")); return; }
@@ -417,11 +417,11 @@ export function createRelayServer(): RelayServer {
           return;
         }
 
-        jsonResponse(res, 404, httpError("not_found", "Unknown PI endpoint."));
+        jsonResponse(res, 404, httpError("not_found", "Unknown VI endpoint."));
         return;
       } catch (error) {
         jsonResponse(res, error instanceof Error && error.message.startsWith("Unknown") ? 404 : 500, {
-          error: error instanceof Error ? error.message : "PI request failed",
+          error: error instanceof Error ? error.message : "VI request failed",
         });
         return;
       }

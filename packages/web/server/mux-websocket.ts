@@ -298,7 +298,7 @@ class TerminalManager {
       return tmuxSessionId;
     }
 
-    // Disable mouse mode — PI sessions are single-pane and Claude Code does not
+    // Disable mouse mode — VI sessions are single-pane and Claude Code does not
     // use mouse input. With mouse on, xterm.js routes drag events to tmux instead
     // of the selection engine, making text selection require Shift+drag. Turning
     // mouse off lets xterm handle drag selection natively with no modifier key.

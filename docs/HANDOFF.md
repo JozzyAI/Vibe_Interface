@@ -1,4 +1,4 @@
-# PI Project Handoff
+# VI Project Handoff
 
 **Date:** 2026-05-18  
 **Repo:** `JozzyAI/Project_Interface`  
@@ -25,15 +25,15 @@ The final product should feel like **Telegram or Slack** for AI coding sessions:
 
 | Component | Role |
 |-----------|------|
-| **VI Dashboard** | Client app (web, desktop, mobile). Shows machines, sessions, approvals. Connects outbound to PI Cloud. |
-| **PI Cloud / Relay** | Account layer + control plane + relay. Owns state in production. Routes messages between dashboard clients and vi-agents. |
+| **VI Dashboard** | Client app (web, desktop, mobile). Shows machines, sessions, approvals. Connects outbound to VI Cloud. |
+| **VI Cloud / Relay** | Account layer + control plane + relay. Owns state in production. Routes messages between dashboard clients and vi-agents. |
 | **vi-agent** | Execution runtime. Runs on any machine. Launches Claude/Codex/tmux. Reports status, streams terminal, receives commands. Connects outbound only. |
 
 ### Long-term security goal
 
 End-to-end encrypted terminal and session payloads — similar to Telegram Secret Chats:
-- Dashboard client encrypts locally → PI Cloud forwards ciphertext → vi-agent decrypts
-- PI Cloud relay sees only routing metadata, not session contents
+- Dashboard client encrypts locally → VI Cloud forwards ciphertext → vi-agent decrypts
+- VI Cloud relay sees only routing metadata, not session contents
 - **Not implemented yet.** DB schema and API payloads are stored opaque to support this later without breaking changes.
 
 ---
@@ -129,7 +129,7 @@ WebSocket server for terminal. On startup, calls `buildTerminalRelay()`:
 - Otherwise → creates `RemoteTerminalRelay` (inbound WS server on port 14801)
 
 ### packages/web/server/mux-websocket.ts
-Browser-facing terminal mux. Handles local tmux sessions and remote sessions via relay. Key fix: `tmux set-option mouse off` for PI sessions — `mouse on` caused drag events to route to PTY instead of xterm.js selection engine, making text selection disappear on mouseup.
+Browser-facing terminal mux. Handles local tmux sessions and remote sessions via relay. Key fix: `tmux set-option mouse off` for VI sessions — `mouse on` caused drag events to route to PTY instead of xterm.js selection engine, making text selection disappear on mouseup.
 
 ### Terminal data flow (cloud mode)
 ```
@@ -160,7 +160,7 @@ Claude Code / Codex process
 ### Phase 1 E2E verified (2026-05-18) — public Fly relay + token rotation
 
 - **Fly relay live:** `https://vi-relay-jozzy.fly.dev` — `/health` → `{"status":"ok"}`, HTTPS + HTTP→HTTPS redirect, 1/1 health checks passing
-- **Auth:** no token → 401, old (rotated-away) token → 401, new pi token → 200 on `/presence`
+- **Auth:** no token → 401, old (rotated-away) token → 401, new vi token → 200 on `/presence`
 - **Dashboard cloud mode:** `VI_RELAY_BASE_URL` + `VI_RELAY_VI_TOKEN` set in `.env.local`; overview `generatedAt` field confirms relay SQLite as source of truth
 - **Enrollment pair command:** correctly uses `https://vi-relay-jozzy.fly.dev --server` in cloud mode
 - **vi-agent pairing:** `pair → start-daemon` connects to `wss://vi-relay-jozzy.fly.dev/vi-agent-relay`; `terminal_relay_connected` confirmed
@@ -379,7 +379,7 @@ If selection disappears on mouseup: check that `tmux set-option mouse off` is ap
 | **Do not make the relay call back to a local LAN dashboard URL** | `VI_RELAY_VI_BASE_URL` was the old anti-pattern and has been removed. Relay owns DB state in cloud mode. |
 | **Do not make machine identity provider-specific** | `tool_type` on agents is legacy/opaque. Provider lives on `jobs.provider`. Adding provider routing to agents breaks multi-provider agents. |
 | **Do not use bash shell aliases for Claude model selection** | `subprocess.Popen` does not expand shell aliases. Always use `VI_CLAUDE_DEFAULT_MODEL` env var or explicit `--model` flag. |
-| **Do not enable `tmux mouse on` for PI terminal sessions** | With mouse mode on, xterm.js drag events route to the PTY instead of the selection engine — text selection disappears on mouseup. |
+| **Do not enable `tmux mouse on` for VI terminal sessions** | With mouse mode on, xterm.js drag events route to the PTY instead of the selection engine — text selection disappears on mouseup. |
 | **Do not stage `dist/`, `.next/`, `*.db`, `*.db-wal`, `*.db-shm`, `node_modules/`** | Never commit generated or runtime artifacts. |
 | **Do not push without `VI_RELAY_VI_BASE_URL` confirmed removed** | Grep for it before any relay-related PR. It must appear only in docs as a deprecation notice. |
 | **Do not use Claude `PreToolUse` hooks as blocking approval gates by default** | Causes agent deadlock if the hook script exits non-zero. Use the vi-agent approval request flow instead. |
@@ -402,7 +402,7 @@ Project_Interface/
 │   └── ROADMAP.md               Product roadmap
 ├── packages/
 │   ├── core/                    Shared TypeScript types
-│   ├── relay/                   PI Cloud relay / control plane
+│   ├── relay/                   VI Cloud relay / control plane
 │   │   ├── src/
 │   │   │   ├── db.ts            SQLite init + schema
 │   │   │   ├── store.ts         All DB operations

@@ -5,17 +5,17 @@
  * They authenticate, announce which tmux sessions they can serve,
  * then forward terminal frames in both directions.
  *
- * PI server never touches the remote machine's PTY/tmux directly —
+ * VI server never touches the remote machine's PTY/tmux directly —
  * it only routes frames between the browser mux and the vi-agent relay.
  *
- * Protocol (vi-agent → PI):
+ * Protocol (vi-agent → VI):
  *   hello        { type, agentId, token }
  *   announce     { type, sessions: string[] }
  *   terminal_data   { type, sessionId, data: string (base64) }
  *   terminal_exited { type, sessionId, exitCode: number }
  *   ping         { type }
  *
- * Protocol (PI → vi-agent):
+ * Protocol (VI → vi-agent):
  *   hello_ack    { type, agentId }
  *   hello_error  { type, message }
  *   terminal_open   { type, sessionId, cols, rows }
@@ -33,7 +33,7 @@ import { StringDecoder } from "node:string_decoder";
 import type { IncomingMessage } from "node:http";
 import type { Socket } from "node:net";
 
-// ── vi-agent → PI ──────────────────────────────────────────────────────────
+// ── vi-agent → VI ──────────────────────────────────────────────────────────
 type AgentMessage =
   | { type: "hello"; agentId: string; token: string }
   | { type: "announce"; sessions: string[] }
@@ -41,7 +41,7 @@ type AgentMessage =
   | { type: "terminal_exited"; sessionId: string; exitCode: number }
   | { type: "ping" };
 
-// ── PI → vi-agent ──────────────────────────────────────────────────────────
+// ── VI → vi-agent ──────────────────────────────────────────────────────────
 type RelayMessage =
   | { type: "hello_ack"; agentId: string }
   | { type: "hello_error"; message: string }

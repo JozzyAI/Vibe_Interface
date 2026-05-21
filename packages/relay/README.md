@@ -1,6 +1,6 @@
 # VI Relay
 
-The PI Cloud Control Plane. A lightweight Node.js server that stores agent state in SQLite and relays messages between the VI dashboard and remote vi-agents.
+The VI Cloud Control Plane. A lightweight Node.js server that stores agent state in SQLite and relays messages between the VI dashboard and remote vi-agents.
 
 Both the dashboard and vi-agents connect outbound to the relay — neither side needs a public IP or open inbound port.
 
@@ -18,10 +18,10 @@ For the full setup guide and token rotation runbook see [docs/cloud-control-plan
 | `POST /v1/daemon/jobs/report` | daemon token | vi-agent |
 | `POST /v1/daemon/requests` | daemon token | vi-agent |
 | `POST /api/remote-agents/enrollments/consume` | none (enrollment code) | vi-agent pair |
-| `GET /v1/pi/overview` | pi token | dashboard |
-| `POST /v1/pi/jobs` | pi token | dashboard |
-| `POST /v1/pi/approvals/:id/respond` | pi token | dashboard |
-| `POST /v1/pi/enrollments` | pi token | dashboard |
+| `GET /v1/vi/overview` | pi token | dashboard |
+| `POST /v1/vi/jobs` | pi token | dashboard |
+| `POST /v1/vi/approvals/:id/respond` | pi token | dashboard |
+| `POST /v1/vi/enrollments` | pi token | dashboard |
 | `GET /health` | none | monitoring |
 | `GET /presence` | pi token | dashboard |
 | `WS /ws` | token | job dispatch, approvals |

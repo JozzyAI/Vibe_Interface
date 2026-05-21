@@ -1,4 +1,4 @@
-# PI Architecture
+# VI Architecture
 
 ## Goal
 
@@ -21,7 +21,7 @@ packages/
 
 Pure TypeScript library with no runtime framework dependency.
 
-**`src/types.ts`** — all PI-owned types:
+**`src/types.ts`** — all VI-owned types:
 - `VISession` — canonical session record
 - `VISessionStatus` — 16-value status enum (spawning → working → pr_open → merged → …)
 - `VIActivityState` — live agent activity (active / idle / waiting_input / blocked / exited)
@@ -33,12 +33,12 @@ Pure TypeScript library with no runtime framework dependency.
 - `getVIProjectBaseDir(projectId)` → `~/.pi/projects/{id}/`
 - `getVIObservabilityDir()` → `~/.pi/observability/`
 
-**`src/session-store.ts`** — PI session registry:
+**`src/session-store.ts`** — VI session registry:
 - `listVISessions()` — reads all `~/.pi/sessions/*.json`; falls back to mock sessions if empty
 - `upsertVISession()`, `deleteVISession()`
 
 **`src/pi-control-plane.ts`** — core control-plane logic:
-- `deriveVISessionState()` — maps raw session fields to a PI state label
+- `deriveVISessionState()` — maps raw session fields to a VI state label
 - `readVISessionArtifacts()` / `writeVISessionHandoff()` — session summaries and handoff bundles
 - `upsertVIPendingQuestion()` / `respondToVIPendingQuestion()` — human-in-the-loop Q&A
 - `listVIGitHubConnectors()` / `upsertVIGitHubConnector()` — GitHub PAT/OAuth connector store
@@ -50,7 +50,7 @@ Pure TypeScript library with no runtime framework dependency.
 
 ## `packages/relay`
 
-Standalone WebSocket broker. No Next.js, no PI core dependency. Only `ws`.
+Standalone WebSocket broker. No Next.js, no VI core dependency. Only `ws`.
 
 Remote agents connect to the relay when they cannot reach the VI dashboard directly (e.g., behind NAT or a firewall). The relay forwards job dispatch and approval requests between PI and the agent.
 
@@ -122,7 +122,7 @@ spawning → working → pr_open → ci_failed → review_pending
 
 Every session record is a single JSON file at `~/.pi/sessions/{id}.json`.
 
-Session artifacts (written by the agent via the PI control plane API) live in `~/.pi/projects/{projectId}/pi-state/{sessionId}/`:
+Session artifacts (written by the agent via the VI control plane API) live in `~/.pi/projects/{projectId}/pi-state/{sessionId}/`:
 - `session-summary.md` — markdown summary of what the agent did
 - `pending-questions.json` — unanswered questions from the agent
 - `execution-state.json` — structured state for recovery
@@ -132,14 +132,14 @@ Session artifacts (written by the agent via the PI control plane API) live in `~
 ## Remote agent protocol
 
 1. User generates enrollment token on the Machines page
-2. Remote machine runs `vi-agent` (Python CLI in `bridges/vi-agent/`) or any WebSocket client that speaks the PI job protocol
+2. Remote machine runs `vi-agent` (Python CLI in `bridges/vi-agent/`) or any WebSocket client that speaks the VI job protocol
 3. Agent connects to relay or VI dashboard WebSocket directly
-4. PI dispatches jobs; agent streams output back; approval requests flow through the same channel
+4. VI dispatches jobs; agent streams output back; approval requests flow through the same channel
 
 ---
 
 ## What is not in this repo
 
-- Agent runner binaries (Claude Code, Codex CLI, OpenCode) — PI talks to them via enrollment, not bundled
+- Agent runner binaries (Claude Code, Codex CLI, OpenCode) — VI talks to them via enrollment, not bundled
 - Database — all state is plain JSON in `~/.pi/`
 - CI/CD configuration — add your own
