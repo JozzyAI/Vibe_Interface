@@ -152,7 +152,7 @@ export class RelayTerminalSubscriber {
     ws.on("open", () => {
       ws.send(JSON.stringify({
         type: "hello",
-        kind: "pi",
+        kind: "vi",
         token: this.relayToken,
       }));
     });

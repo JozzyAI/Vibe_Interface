@@ -9,7 +9,7 @@ const VI_SESSION_INSTRUCTIONS = `
 
 VI hook: host-side blockers belong in a separate VI utility session, not repo edits.
 For GitHub login, Codex upgrades/restarts, host tool installs, browser login, or machine setup, run:
-vi-agent request-pi-session --title "Short title" --message "What is needed and why" --command "host command or script"
+vi-agent request-vi-session --title "Short title" --message "What is needed and why" --command "host command or script"
 `;
 
 function withViHookInstructions(prompt?: string): string | undefined {

@@ -1,4 +1,4 @@
-export type RelayPeerKind = "pi" | "daemon";
+export type RelayPeerKind = "vi" | "daemon";
 
 export type RelayMessageType =
   | "hello"

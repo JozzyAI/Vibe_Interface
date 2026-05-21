@@ -31,7 +31,7 @@ export function loadRelayTokens(rawValue = process.env.VI_RELAY_TOKENS): RelayTo
       const label = parts[2];
       return {
         token,
-        kind: kind === "pi" || kind === "daemon" ? kind : undefined,
+        kind: kind === "vi" || kind === "daemon" ? kind : undefined,
         label: label || undefined,
       } satisfies RelayTokenRecord;
     })

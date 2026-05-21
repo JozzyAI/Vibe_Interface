@@ -2345,7 +2345,7 @@ def run_daemon(args: argparse.Namespace) -> int:
                 "VI_AGENT_STATE_FILE": str(state_path),
                 "VI_REMOTE_JOB_ID": job_id,
                 "VI_HOOK_REQUEST_EXTERNAL": "vi-agent request-external-action",
-                "VI_HOOK_REQUEST_SESSION": "vi-agent request-pi-session",
+                "VI_HOOK_REQUEST_SESSION": "vi-agent request-vi-session",
                 "VI_SESSION_DIR": str(artifact_dir),
             }
         )
@@ -2447,7 +2447,7 @@ def run_daemon(args: argparse.Namespace) -> int:
                 "VI_AGENT_STATE_FILE": str(state_path),
                 "VI_REMOTE_JOB_ID": job_id,
                 "VI_HOOK_REQUEST_EXTERNAL": "vi-agent request-external-action",
-                "VI_HOOK_REQUEST_SESSION": "vi-agent request-pi-session",
+                "VI_HOOK_REQUEST_SESSION": "vi-agent request-vi-session",
                 "VI_SESSION_DIR": str(artifact_dir),
                 # Carry the current PATH so vi-approve is findable inside tmux
                 # (tmux inherits from the server start environment, not the
@@ -3708,7 +3708,7 @@ def build_parser() -> argparse.ArgumentParser:
     external_action.add_argument("--helper-prompt")
     external_action.add_argument("--parent-job-id")
 
-    pi_session = subparsers.add_parser("request-pi-session", parents=[common])
+    pi_session = subparsers.add_parser("request-vi-session", parents=[common])
     pi_session.add_argument("--title", required=True)
     pi_session.add_argument("--message", required=True)
     pi_session.add_argument("--command", dest="session_command", required=True)
@@ -3813,7 +3813,7 @@ def main() -> None:
         if result.get("status") == "rejected":
             raise SystemExit(2)
         return
-    if args.command == "request-pi-session":
+    if args.command == "request-vi-session":
         args.suggested_command = args.session_command
         args.command = None
         args.event_type = "external_action"

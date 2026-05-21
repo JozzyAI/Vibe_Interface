@@ -100,7 +100,7 @@ export function createRelayServer(): RelayServer {
     // ── Presence (authenticated — pi token required) ───────────────────────
     if (pathname === "/presence") {
       const token = extractBearerToken(req.headers.authorization);
-      if (!token || !authorizeRelayToken(tokens, token, "pi")) {
+      if (!token || !authorizeRelayToken(tokens, token, "vi")) {
         jsonResponse(res, 401, httpError("unauthorized", "Missing or invalid PI token."));
         return;
       }
@@ -261,7 +261,7 @@ export function createRelayServer(): RelayServer {
         jsonResponse(res, 401, httpError("unauthorized", "Missing bearer token."));
         return;
       }
-      const authorized = authorizeRelayToken(tokens, token, "pi");
+      const authorized = authorizeRelayToken(tokens, token, "vi");
       if (!authorized) {
         jsonResponse(res, 403, httpError("forbidden", "Invalid PI token."));
         return;
@@ -461,13 +461,13 @@ export function createRelayServer(): RelayServer {
         if (msg["type"] !== "hello") { socket.close(4001, "Send hello first"); return; }
         const t = typeof msg["token"] === "string" ? msg["token"] : "";
         const kind = typeof msg["kind"] === "string" ? msg["kind"] : "daemon";
-        const authorized = authorizeRelayToken(tokens, t, kind === "pi" ? "pi" : "daemon");
+        const authorized = authorizeRelayToken(tokens, t, kind === "vi" ? "vi" : "daemon");
         if (!authorized) {
           socket.send(JSON.stringify({ type: "hello_error", message: "Invalid relay token" }));
           socket.close(4003, "Unauthorized");
           return;
         }
-        if (kind === "pi") {
+        if (kind === "vi") {
           isDashboard = true;
           if (terminalDashboard && terminalDashboard !== socket) terminalDashboard.close(4002, "Replaced");
           terminalDashboard = socket;
