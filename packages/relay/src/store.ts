@@ -884,6 +884,25 @@ export function createReconnectEnrollment(agentId: string) {
   return { enrollment, ...buildPairCommands(enrollment) };
 }
 
+// ── Agent policy ──────────────────────────────────────────────────────────────
+
+export function setAgentPolicy(input: {
+  agentId: string;
+  mode?: "manual" | "timeout_allow" | "always_allow";
+  timeoutSeconds?: number;
+}) {
+  const db = getDb();
+  const agent = db.prepare("SELECT * FROM agents WHERE agent_id = ?").get(input.agentId) as AgentRow | undefined;
+  if (!agent) throw new Error(`Unknown remote agent: ${input.agentId}`);
+  const mode = input.mode ?? agent.permission_mode;
+  const timeout = typeof input.timeoutSeconds === "number" && input.timeoutSeconds > 0
+    ? Math.floor(input.timeoutSeconds)
+    : agent.timeout_seconds;
+  db.prepare("UPDATE agents SET permission_mode = ?, timeout_seconds = ? WHERE agent_id = ?")
+    .run(mode, timeout, input.agentId);
+  return serializeAgent(db.prepare("SELECT * FROM agents WHERE agent_id = ?").get(input.agentId) as AgentRow);
+}
+
 // ── Agent management ──────────────────────────────────────────────────────────
 
 export function removeAgent(agentId: string) {

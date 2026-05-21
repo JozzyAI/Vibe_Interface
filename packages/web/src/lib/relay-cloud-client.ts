@@ -233,3 +233,16 @@ export async function requestRemoteAgentDaemonRestart(agentId: string) {
     `/v1/vi/agents/${encodeURIComponent(agentId)}/restart-daemon`,
   );
 }
+
+export async function setRemoteAgentPolicy(input: {
+  agentId: string;
+  mode?: "manual" | "timeout_allow" | "always_allow";
+  cycle?: boolean;
+  timeoutSeconds?: number;
+}) {
+  const { cycle: _cycle, ...rest } = input;
+  return piPost<{ agent: unknown }>(
+    `/v1/vi/agents/${encodeURIComponent(input.agentId)}/policy`,
+    rest,
+  ).then((r) => r.agent);
+}

@@ -382,6 +382,20 @@ export function createRelayServer(): RelayServer {
           return;
         }
 
+        // set agent policy (permission mode / timeout)
+        const policyMatch = pathname.match(/^\/v1\/vi\/agents\/([^/]+)\/policy$/);
+        if (policyMatch && req.method === "POST") {
+          const agentId = decodeURIComponent(policyMatch[1] ?? "");
+          const body = (await readJsonBody(req)) as { mode?: string; timeoutSeconds?: number };
+          const agent = store.setAgentPolicy({
+            agentId,
+            mode: (body.mode as "manual" | "timeout_allow" | "always_allow") || undefined,
+            timeoutSeconds: body.timeoutSeconds,
+          });
+          jsonResponse(res, 200, { agent });
+          return;
+        }
+
         // reconnect agent (create re-pair enrollment)
         const reconnectMatch = pathname.match(/^\/v1\/pi\/agents\/([^/]+)\/reconnect$/);
         if (reconnectMatch && req.method === "POST") {
