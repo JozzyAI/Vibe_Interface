@@ -34,7 +34,7 @@ export async function generateMetadata(): Promise<Metadata> {
       template: `%s | ${projectName}`,
       default: `PI | ${projectName}`,
     },
-    description: "Project Interface — control plane for AI coding agents",
+    description: "Vibe Interface — control plane for AI coding agents",
     appleWebApp: {
       capable: true,
       statusBarStyle: "black-translucent",

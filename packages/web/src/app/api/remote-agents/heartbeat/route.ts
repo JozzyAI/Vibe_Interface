@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
-// Daemon route — pi-agent calls relay directly in cloud mode; this stays local-only.
+// Daemon route — vi-agent calls relay directly in cloud mode; this stays local-only.
 import { heartbeatRemoteAgent } from "@/lib/remote-agents";
 import type { RemoteAgentSessionHistoryItem, RemoteAuthConnectorSummary } from "@/lib/types";
 

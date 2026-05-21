@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const relayBase = (process.env["PI_RELAY_BASE_URL"] ?? "").trim();
-  const piToken = (process.env["PI_RELAY_PI_TOKEN"] ?? "").trim();
-  const cloudMode = !!(relayBase && piToken);
+  const relayBase = (process.env["VI_RELAY_BASE_URL"] ?? "").trim();
+  const viToken = (process.env["VI_RELAY_VI_TOKEN"] ?? "").trim();
+  const cloudMode = !!(relayBase && viToken);
 
   let relayHost: string | null = null;
   if (cloudMode && relayBase) {

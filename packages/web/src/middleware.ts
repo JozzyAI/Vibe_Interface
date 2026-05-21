@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 // Always public — no session needed
 const PUBLIC_PREFIXES = ["/login", "/api/auth/", "/_next/", "/favicon.ico"];
 
-// Machine-to-server calls from pi-agent — no browser cookie
+// Machine-to-server calls from vi-agent — no browser cookie
 const AGENT_PREFIXES = ["/api/remote-agents/"];
 
 export function middleware(request: NextRequest) {
@@ -17,7 +17,7 @@ export function middleware(request: NextRequest) {
   }
 
   // No token configured → auth disabled (dev mode)
-  const requiredToken = process.env.PI_ACCESS_TOKEN?.trim();
+  const requiredToken = process.env.VI_ACCESS_TOKEN?.trim();
   if (!requiredToken) {
     return NextResponse.next();
   }

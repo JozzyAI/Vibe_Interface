@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { PIAgentsEntry } from "@/components/PIAgentsEntry";
-import { PIWorkspaceShell } from "@/components/PIWorkspaceShell";
+import { VIAgentsEntry } from "@/components/VIAgentsEntry";
+import { VIWorkspaceShell } from "@/components/VIWorkspaceShell";
 import { getDashboardPageData } from "@/lib/dashboard-page-data";
-import { getPIIdeaExecutionRoot } from "@/lib/pi-ideas";
-import { readPIWorkspaceFiles } from "@/lib/pi-workspace-files";
+import { getVIIdeaExecutionRoot } from "@/lib/vi-ideas";
+import { readVIWorkspaceFiles } from "@/lib/vi-workspace-files";
 import { getRemoteApprovalOverview } from "@/lib/backend";
 import type { RemoteAgentSummary } from "@/lib/types";
 
@@ -83,17 +83,17 @@ function MachineSidebar({ agents }: { agents: RemoteAgentSummary[] }) {
 
 export default async function AddMachinePage() {
   const pageData = await getDashboardPageData("all");
-  const workspaceRoot = getPIIdeaExecutionRoot();
+  const workspaceRoot = getVIIdeaExecutionRoot();
   const [remoteOverview, workspaceFiles] = await Promise.all([
     getRemoteApprovalOverview(),
-    readPIWorkspaceFiles(workspaceRoot),
+    readVIWorkspaceFiles(workspaceRoot),
   ]);
   const connectedCount = remoteOverview.agents.filter(
     (agent) => agent.connectionState === "connected",
   ).length;
 
   return (
-    <PIWorkspaceShell
+    <VIWorkspaceShell
       active="agents"
       title="Add machine"
       subtitle="Create a one-time pairing code for a computer or server running Codex CLI or Claude Code."
@@ -105,7 +105,7 @@ export default async function AddMachinePage() {
       sidebarContent={<MachineSidebar agents={remoteOverview.agents} />}
       sidebarFooter={`${connectedCount} online / ${remoteOverview.agents.length} known`}
     >
-      <PIAgentsEntry initialRemoteOverview={remoteOverview} view="new" />
-    </PIWorkspaceShell>
+      <VIAgentsEntry initialRemoteOverview={remoteOverview} view="new" />
+    </VIWorkspaceShell>
   );
 }

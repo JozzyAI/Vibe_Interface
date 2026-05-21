@@ -10,7 +10,7 @@ export async function GET(
   try {
     const { enrollmentId } = await context.params;
     const enrollment = await getRemoteEnrollmentForBootstrap({ enrollmentId });
-    const server = process.env.PI_PUBLIC_URL ?? request.nextUrl.origin;
+    const server = process.env.VI_PUBLIC_URL ?? request.nextUrl.origin;
     const packageUrl = `${server}/api/remote-agents/bootstrap/package`;
     const script = `#!/usr/bin/env bash
 set -euo pipefail
@@ -19,21 +19,21 @@ SERVER="${server}"
 CODE="${enrollment.code}"
 PACKAGE_URL="${packageUrl}"
 
-if ! command -v pi-agent >/dev/null 2>&1; then
+if ! command -v vi-agent >/dev/null 2>&1; then
   if ! command -v python3 >/dev/null 2>&1; then
-    echo "python3 is required to install pi-agent."
+    echo "python3 is required to install vi-agent."
     exit 1
   fi
   if ! command -v pip3 >/dev/null 2>&1 && ! python3 -m pip --version >/dev/null 2>&1; then
-    echo "pip is required to install pi-agent."
+    echo "pip is required to install vi-agent."
     exit 1
   fi
-  echo "Installing pi-agent from PI..."
+  echo "Installing vi-agent from PI..."
   python3 -m pip install --user "$PACKAGE_URL"
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
-exec pi-agent pair --server "$SERVER" --code "$CODE" --start
+exec vi-agent pair --server "$SERVER" --code "$CODE" --start
 `;
     return new Response(script, {
       status: 200,

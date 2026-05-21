@@ -6,16 +6,16 @@ export interface RelayTokenRecord {
   label?: string;
 }
 
-export function loadRelayTokens(rawValue = process.env.PI_RELAY_TOKENS): RelayTokenRecord[] {
+export function loadRelayTokens(rawValue = process.env.VI_RELAY_TOKENS): RelayTokenRecord[] {
   const raw = rawValue?.trim();
   if (!raw) {
     // No tokens configured — refuse all authenticated requests.
-    // In production, PI_RELAY_TOKENS must be set via fly secrets set.
+    // In production, VI_RELAY_TOKENS must be set via fly secrets set.
     // Do NOT fall back to dev tokens: they are public in source control.
     console.warn(
-      "[Auth] WARNING: PI_RELAY_TOKENS is not set. " +
+      "[Auth] WARNING: VI_RELAY_TOKENS is not set. " +
       "All authenticated endpoints will reject every request. " +
-      "Set PI_RELAY_TOKENS before deploying.",
+      "Set VI_RELAY_TOKENS before deploying.",
     );
     return [];
   }

@@ -1,6 +1,6 @@
-# PI Dashboard — Agent Launch Guide
+# VI Dashboard — Agent Launch Guide
 
-This document is written for AI agents. Follow it exactly to install and launch the PI dashboard. Every common failure mode is documented below.
+This document is written for AI agents. Follow it exactly to install and launch the VI dashboard. Every common failure mode is documented below.
 
 ---
 
@@ -9,11 +9,11 @@ This document is written for AI agents. Follow it exactly to install and launch 
 ```
 /mnt/e/project/PI/
 ├── packages/web/          ← Next.js dashboard (all commands run from here)
-│   ├── .env.local         ← env vars (PI_PUBLIC_URL, etc.)
+│   ├── .env.local         ← env vars (VI_PUBLIC_URL, etc.)
 │   ├── .next/             ← build cache (delete to force clean rebuild)
 │   └── dist-server/       ← compiled server bundle (production only)
 ├── packages/core/         ← shared TypeScript core
-├── bridges/pi-agent/      ← Python pi-agent client
+├── bridges/vi-agent/      ← Python vi-agent client
 └── ROADMAP.md
 ```
 
@@ -141,19 +141,19 @@ strings /tmp/pi-dev.log | grep -E "Local|Network|error|Error" | tail -10
 Located at `packages/web/.env.local`. Minimum required for LAN access:
 
 ```env
-PI_PUBLIC_URL=http://<your-LAN-ip>:3000
+VI_PUBLIC_URL=http://<your-LAN-ip>:3000
 ```
 
 Optional:
 ```env
-PI_CLAUDE_DEFAULT_MODEL=claude-sonnet-4-6   # model passed as --model when UI is set to Default
+VI_CLAUDE_DEFAULT_MODEL=claude-sonnet-4-6   # model passed as --model when UI is set to Default
 DIRECT_TERMINAL_PORT=14801                  # default, override if port conflicts
 TERMINAL_WS_PATH=                           # leave empty unless using a reverse proxy ws path
 ```
 
 > **Important:** Shell aliases (e.g. `alias claude="claude --model ..."`) do NOT apply to
-> pi-agent launches. pi-agent spawns Claude via subprocess and aliases are never expanded.
-> Always set `PI_CLAUDE_DEFAULT_MODEL` instead of relying on aliases.
+> vi-agent launches. vi-agent spawns Claude via subprocess and aliases are never expanded.
+> Always set `VI_CLAUDE_DEFAULT_MODEL` instead of relying on aliases.
 
 ---
 
@@ -208,20 +208,20 @@ npx --no concurrently "..." "..."
 `--hostname` must be passed directly to `next dev`, not through `npm run dev --`.
 Use the `npx --no concurrently` form shown in Mode 2 above.
 
-### Relay logs show `PI_RELAY_TOKENS not set`
+### Relay logs show `VI_RELAY_TOKENS not set`
 
 ```
-[RelayServer] PI_RELAY_TOKENS not set — relay accepts any connection (dev mode only)
+[RelayServer] VI_RELAY_TOKENS not set — relay accepts any connection (dev mode only)
 ```
 
 This is a security warning. In production add to `.env.local`:
 ```env
-PI_RELAY_TOKENS=<random-token>
+VI_RELAY_TOKENS=<random-token>
 ```
 
 ### Heartbeat/report API taking 500ms+
 
-Cause: Multiple stale pi-agents still connecting. The 410 responses will stop them.
+Cause: Multiple stale vi-agents still connecting. The 410 responses will stop them.
 If it persists after 60 seconds, restart the server.
 
 ---

@@ -10,7 +10,7 @@ export interface RelayDispatchAttempt {
 }
 
 function relayBaseUrl(): string | null {
-  const raw = process.env.PI_RELAY_BASE_URL ?? process.env.PI_RELAY_URL;
+  const raw = process.env.VI_RELAY_BASE_URL ?? process.env.VI_RELAY_URL;
   if (!raw) {
     return null;
   }
@@ -27,7 +27,7 @@ function relayBaseUrl(): string | null {
 }
 
 function relayToken(): string | null {
-  return process.env.PI_RELAY_PI_TOKEN ?? null;
+  return process.env.VI_RELAY_VI_TOKEN ?? null;
 }
 
 async function postRelay(pathname: string, payload: unknown): Promise<RelayDispatchAttempt> {

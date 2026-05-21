@@ -1,5 +1,5 @@
 import { type NextRequest } from "next/server";
-import { getPISession } from "@pi/core";
+import { getVISession } from "@vi/core";
 import { getCorrelationId, jsonWithCorrelation } from "@/lib/observability";
 import { parseNativeCodexApproval } from "@/lib/native-codex-approval";
 
@@ -15,7 +15,7 @@ export async function GET(
   const correlationId = getCorrelationId(request);
   try {
     const { id } = await params;
-    const session = await getPISession(id);
+    const session = await getVISession(id);
     if (!session) return jsonWithCorrelation({ error: "Session not found" }, { status: 404 }, correlationId);
 
     const tmuxName = session.metadata["tmuxName"] ?? session.metadata["host"] ?? session.id;
@@ -38,7 +38,7 @@ export async function POST(
   const correlationId = getCorrelationId(request);
   try {
     const { id } = await params;
-    const session = await getPISession(id);
+    const session = await getVISession(id);
     if (!session) return jsonWithCorrelation({ error: "Session not found" }, { status: 404 }, correlationId);
 
     const body = (await request.json().catch(() => ({}))) as { decision?: string };

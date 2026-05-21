@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 // Session status & activity
 // ---------------------------------------------------------------------------
 
-export type PISessionStatus =
+export type VISessionStatus =
   | "spawning"
   | "working"
   | "pr_open"
@@ -22,7 +22,7 @@ export type PISessionStatus =
   | "terminated"
   | "killed";
 
-export type PIActivityState =
+export type VIActivityState =
   | "active"
   | "ready"
   | "idle"
@@ -34,7 +34,7 @@ export type CIStatus = "pending" | "running" | "passed" | "failed" | "skipped";
 
 export type ReviewDecision = "approved" | "changes_requested" | "commented";
 
-export const PI_TERMINAL_STATUSES: ReadonlySet<PISessionStatus> = new Set([
+export const VI_TERMINAL_STATUSES: ReadonlySet<VISessionStatus> = new Set([
   "killed",
   "terminated",
   "done",
@@ -43,37 +43,37 @@ export const PI_TERMINAL_STATUSES: ReadonlySet<PISessionStatus> = new Set([
   "merged",
 ]);
 
-export const PI_TERMINAL_ACTIVITIES: ReadonlySet<PIActivityState> = new Set(["exited"]);
-export const PI_NON_RESTORABLE_STATUSES: ReadonlySet<PISessionStatus> = new Set(["merged"]);
+export const VI_TERMINAL_ACTIVITIES: ReadonlySet<VIActivityState> = new Set(["exited"]);
+export const VI_NON_RESTORABLE_STATUSES: ReadonlySet<VISessionStatus> = new Set(["merged"]);
 
-export function isTerminalPISession(session: {
-  status: PISessionStatus;
-  activity: PIActivityState | null;
+export function isTerminalVISession(session: {
+  status: VISessionStatus;
+  activity: VIActivityState | null;
 }): boolean {
   return (
-    PI_TERMINAL_STATUSES.has(session.status) ||
-    (session.activity !== null && PI_TERMINAL_ACTIVITIES.has(session.activity))
+    VI_TERMINAL_STATUSES.has(session.status) ||
+    (session.activity !== null && VI_TERMINAL_ACTIVITIES.has(session.activity))
   );
 }
 
-export function isPISessionRestorable(session: {
-  status: PISessionStatus;
-  activity: PIActivityState | null;
+export function isVISessionRestorable(session: {
+  status: VISessionStatus;
+  activity: VIActivityState | null;
 }): boolean {
-  return isTerminalPISession(session) && !PI_NON_RESTORABLE_STATUSES.has(session.status);
+  return isTerminalVISession(session) && !VI_NON_RESTORABLE_STATUSES.has(session.status);
 }
 
 // ---------------------------------------------------------------------------
 // Core session type
 // ---------------------------------------------------------------------------
 
-export interface PISession {
+export interface VISession {
   id: string;
   title: string;
   projectId: string;
   issueId?: string;
-  status: PISessionStatus;
-  activity: PIActivityState | null;
+  status: VISessionStatus;
+  activity: VIActivityState | null;
   branch?: string | null;
   pr?: { url: string; number: number } | null;
   tool: string;
@@ -83,11 +83,11 @@ export interface PISession {
   updatedAt: string;
   agentInfo?: { summary?: string } | null;
   metadata: Record<string, string>;
-  events?: PISessionEvent[];
+  events?: VISessionEvent[];
   needsRestore?: boolean;
 }
 
-export interface PISessionEvent {
+export interface VISessionEvent {
   id: string;
   sessionId: string;
   type: string;
@@ -99,7 +99,7 @@ export interface PISessionEvent {
 // Project & tracker config
 // ---------------------------------------------------------------------------
 
-export interface PIProjectConfig {
+export interface VIProjectConfig {
   projectId: string;
   projectPath: string;
   name?: string;
@@ -113,11 +113,11 @@ export interface CreateIssueInput {
   assignee?: string;
 }
 
-export interface PITracker {
+export interface VITracker {
   name: string;
   createIssue?: (
     input: CreateIssueInput,
-    project: PIProjectConfig,
+    project: VIProjectConfig,
   ) => Promise<{ id: string; title: string; url: string; labels: string[] }>;
 }
 
@@ -125,7 +125,7 @@ export interface PITracker {
 // Mock sessions for first-run / standalone demo
 // ---------------------------------------------------------------------------
 
-export function createMockPISessions(): PISession[] {
+export function createMockVISessions(): VISession[] {
   const now = new Date();
   const minsAgo = (n: number) => new Date(now.getTime() - n * 60_000).toISOString();
 

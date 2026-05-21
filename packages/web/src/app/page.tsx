@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
-import { PIWorkbench } from "@/components/PIWorkbench";
+import { VIWorkbench } from "@/components/VIWorkbench";
 import {
   getDashboardPageData,
   getDashboardProjectName,
   resolveDashboardProjectFilter,
 } from "@/lib/dashboard-page-data";
-import { getPIIdeaExecutionRoot } from "@/lib/pi-ideas";
-import { readPIWorkspaceFiles } from "@/lib/pi-workspace-files";
+import { getVIIdeaExecutionRoot } from "@/lib/vi-ideas";
+import { readVIWorkspaceFiles } from "@/lib/vi-workspace-files";
 import { getRemoteApprovalOverview } from "@/lib/backend";
 
 export async function generateMetadata(props: {
@@ -24,14 +24,14 @@ export default async function Home(props: { searchParams: Promise<{ project?: st
   const searchParams = await props.searchParams;
   const projectFilter = resolveDashboardProjectFilter(searchParams.project);
   const pageData = await getDashboardPageData(projectFilter);
-  const workspaceRoot = getPIIdeaExecutionRoot();
+  const workspaceRoot = getVIIdeaExecutionRoot();
   const [remoteOverview, workspaceFiles] = await Promise.all([
     getRemoteApprovalOverview(),
-    readPIWorkspaceFiles(workspaceRoot),
+    readVIWorkspaceFiles(workspaceRoot),
   ]);
 
   return (
-    <PIWorkbench
+    <VIWorkbench
       initialSessions={pageData.sessions}
       initialRemoteOverview={remoteOverview}
       ideaBoard={pageData.ideaBoard}

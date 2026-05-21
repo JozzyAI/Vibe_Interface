@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import type { PIApprovalHubData, PIApprovalInboxEntry } from "@/lib/types";
+import type { VIApprovalHubData, VIApprovalInboxEntry } from "@/lib/types";
 import type { NativeCodexApproval } from "@/lib/native-codex-approval";
 
 interface Props {
@@ -54,7 +54,7 @@ function riskTone(risk: string): string {
   }
 }
 
-function eventLabel(eventType: PIApprovalInboxEntry["context"]["eventType"]): string {
+function eventLabel(eventType: VIApprovalInboxEntry["context"]["eventType"]): string {
   switch (eventType) {
     case "network_access":
       return "Network access";
@@ -77,25 +77,25 @@ function eventLabel(eventType: PIApprovalInboxEntry["context"]["eventType"]): st
   }
 }
 
-function primaryButtonLabel(request: PIApprovalInboxEntry): string {
+function primaryButtonLabel(request: VIApprovalInboxEntry): string {
   return request.context.primaryAction === "reply" ? "Send reply" : "Approve";
 }
 
 export function SessionApprovalPanel({ projectId, sessionId }: Props) {
-  const [requests, setRequests] = useState<PIApprovalInboxEntry[]>([]);
+  const [requests, setRequests] = useState<VIApprovalInboxEntry[]>([]);
   const [nativeApproval, setNativeApproval] = useState<NativeCodexApproval | null>(null);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const hubUrl = useMemo(
-    () => `/api/pi/approval-hub?project=${encodeURIComponent(projectId)}`,
+    () => `/api/vi/approval-hub?project=${encodeURIComponent(projectId)}`,
     [projectId],
   );
 
   const refresh = async () => {
     const [latest, native] = await Promise.all([
-      requestJson<PIApprovalHubData>(hubUrl),
+      requestJson<VIApprovalHubData>(hubUrl),
       requestJson<NativeApprovalPayload>(`/api/sessions/${encodeURIComponent(sessionId)}/native-approval`),
     ]);
     setRequests(latest.inbox.filter((item) => item.sessionId === sessionId));
@@ -118,13 +118,13 @@ export function SessionApprovalPanel({ projectId, sessionId }: Props) {
   const respond = (
     requestId: string,
     action: "approve" | "reject" | "reply",
-    request: PIApprovalInboxEntry,
+    request: VIApprovalInboxEntry,
   ) =>
     startTransition(() => {
       void (async () => {
         try {
           setError(null);
-          await requestJson("/api/pi/requests/respond", {
+          await requestJson("/api/vi/requests/respond", {
             method: "POST",
             body: JSON.stringify({
               sessionId: request.sessionId,
@@ -144,12 +144,12 @@ export function SessionApprovalPanel({ projectId, sessionId }: Props) {
       })();
     });
 
-  const alwaysApprove = (request: PIApprovalInboxEntry) =>
+  const alwaysApprove = (request: VIApprovalInboxEntry) =>
     startTransition(() => {
       void (async () => {
         try {
           setError(null);
-          await requestJson("/api/pi/approval-hub/policy", {
+          await requestJson("/api/vi/approval-hub/policy", {
             method: "POST",
             body: JSON.stringify({
               projectId,
@@ -158,7 +158,7 @@ export function SessionApprovalPanel({ projectId, sessionId }: Props) {
               timeoutSeconds: request.timeoutSeconds,
             }),
           });
-          await requestJson("/api/pi/requests/respond", {
+          await requestJson("/api/vi/requests/respond", {
             method: "POST",
             body: JSON.stringify({
               sessionId: request.sessionId,

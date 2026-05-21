@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { PIRemoteSessionDetail, PIRemoteSessionSidePanel } from "@/components/PIRemoteSessionDetail";
-import { getPISessionSidebarCount, PISessionSidebar } from "@/components/PISessionSidebar";
-import { PIWorkspaceShell } from "@/components/PIWorkspaceShell";
+import { VIRemoteSessionDetail, VIRemoteSessionSidePanel } from "@/components/VIRemoteSessionDetail";
+import { getVISessionSidebarCount, VISessionSidebar } from "@/components/VISessionSidebar";
+import { VIWorkspaceShell } from "@/components/VIWorkspaceShell";
 import { getDashboardPageData } from "@/lib/dashboard-page-data";
-import { getPIApprovalHubData } from "@/lib/pi-approval-hub";
-import { getPIIdeaExecutionRoot } from "@/lib/pi-ideas";
-import { readPIWorkspaceFiles } from "@/lib/pi-workspace-files";
+import { getVIApprovalHubData } from "@/lib/vi-approval-hub";
+import { getVIIdeaExecutionRoot } from "@/lib/vi-ideas";
+import { readVIWorkspaceFiles } from "@/lib/vi-workspace-files";
 import { getRemoteApprovalOverview } from "@/lib/backend";
 
 export const dynamic = "force-dynamic";
@@ -25,11 +25,11 @@ export default async function RemoteSessionPage(props: {
   params: Promise<{ id: string }>;
 }) {
   const params = await props.params;
-  const workspaceRoot = getPIIdeaExecutionRoot();
+  const workspaceRoot = getVIIdeaExecutionRoot();
   const [pageData, remoteOverview, workspaceFiles] = await Promise.all([
     getDashboardPageData("all"),
     getRemoteApprovalOverview(),
-    readPIWorkspaceFiles(workspaceRoot),
+    readVIWorkspaceFiles(workspaceRoot),
   ]);
   const cards = await Promise.all(
     pageData.projects.map(async (project: { id: string; name: string; sessionPrefix?: string }) => {
@@ -37,7 +37,7 @@ export default async function RemoteSessionPage(props: {
       return {
         projectId: project.id,
         projectName: project.name,
-        hub: await getPIApprovalHubData({
+        hub: await getVIApprovalHubData({
           projectId: project.id,
           sessions: projectPageData.sessions,
           controlPlane: projectPageData.controlPlane,
@@ -48,10 +48,10 @@ export default async function RemoteSessionPage(props: {
   const connectedCount = remoteOverview.agents.filter(
     (agent) => agent.connectionState === "connected",
   ).length;
-  const sessionCount = getPISessionSidebarCount(cards, remoteOverview);
+  const sessionCount = getVISessionSidebarCount(cards, remoteOverview);
 
   return (
-    <PIWorkspaceShell
+    <VIWorkspaceShell
       active="sessions"
       title="Live remote session"
       subtitle="Watch the remote CLI, send input, and clear detected approval prompts from the same PI workspace."
@@ -61,7 +61,7 @@ export default async function RemoteSessionPage(props: {
       workspaceRoot={workspaceRoot}
       workspaceFiles={workspaceFiles}
       sidebarContent={
-        <PISessionSidebar
+        <VISessionSidebar
           cards={cards}
           remoteOverview={remoteOverview}
           activeHref={`/remote-sessions/${encodeURIComponent(params.id)}`}
@@ -70,11 +70,11 @@ export default async function RemoteSessionPage(props: {
       sidebarFooter={`${sessionCount} session${sessionCount === 1 ? "" : "s"} shown`}
       rightSidebarTitle="Session"
       rightSidebarContent={
-        <PIRemoteSessionSidePanel jobId={params.id} initialOverview={remoteOverview} />
+        <VIRemoteSessionSidePanel jobId={params.id} initialOverview={remoteOverview} />
       }
       hideHeader
     >
-      <PIRemoteSessionDetail jobId={params.id} initialOverview={remoteOverview} />
-    </PIWorkspaceShell>
+      <VIRemoteSessionDetail jobId={params.id} initialOverview={remoteOverview} />
+    </VIWorkspaceShell>
   );
 }

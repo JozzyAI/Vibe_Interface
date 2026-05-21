@@ -2,7 +2,7 @@
  * backend.ts — mode switching for remote-agent operations.
  *
  * Local mode  (default): reads/writes local data/store.json via remote-agents.ts
- * Cloud mode  (PI_RELAY_BASE_URL + PI_RELAY_PI_TOKEN set): calls relay /v1/pi/*
+ * Cloud mode  (VI_RELAY_BASE_URL + VI_RELAY_VI_TOKEN set): calls relay /v1/pi/*
  *
  * All callers use getBackend() so the switch is in one place.
  */
@@ -10,8 +10,8 @@ import "server-only";
 
 export function isCloudMode(): boolean {
   return !!(
-    process.env["PI_RELAY_BASE_URL"]?.trim() &&
-    process.env["PI_RELAY_PI_TOKEN"]?.trim()
+    process.env["VI_RELAY_BASE_URL"]?.trim() &&
+    process.env["VI_RELAY_VI_TOKEN"]?.trim()
   );
 }
 
@@ -50,7 +50,7 @@ export function getBackend() {
     // Route files call this at the top of their handler after await.
     return {
       mode: "cloud" as const,
-      relayBase: (process.env["PI_RELAY_BASE_URL"] ?? "").trim(),
+      relayBase: (process.env["VI_RELAY_BASE_URL"] ?? "").trim(),
     };
   }
   return {

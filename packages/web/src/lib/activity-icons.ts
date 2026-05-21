@@ -1,7 +1,7 @@
-import type { PIActivityState } from "@pi/core";
+import type { VIActivityState } from "@vi/core";
 
 /** Emoji indicators for each activity state, shared across components. */
-export const activityIcon: Record<PIActivityState, string> = {
+export const activityIcon: Record<VIActivityState, string> = {
   active: "\u26A1", // ⚡
   ready: "\uD83D\uDFE2", // 🟢
   idle: "\uD83D\uDCA4", // 💤

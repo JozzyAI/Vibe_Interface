@@ -772,7 +772,7 @@ export function SessionDetail({
             </button>
           ) : null}
           <div className="dashboard-app-header__brand">
-            <span>Project Interface</span>
+            <span>Vibe Interface</span>
           </div>
           {showHeaderProjectLabel ? (
             <>

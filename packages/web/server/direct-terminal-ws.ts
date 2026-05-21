@@ -20,9 +20,9 @@ export interface DirectTerminalServer {
 
 function buildTerminalRelay(): TerminalRelay {
   const relayBase = (
-    process.env.PI_RELAY_BASE_URL ?? process.env.PI_RELAY_URL ?? ""
+    process.env.VI_RELAY_BASE_URL ?? process.env.VI_RELAY_URL ?? ""
   ).trim().replace(/\/$/, "");
-  const relayToken = (process.env.PI_RELAY_PI_TOKEN ?? "").trim();
+  const relayToken = (process.env.VI_RELAY_VI_TOKEN ?? "").trim();
 
   if (relayBase && relayToken) {
     const wsBase = relayBase.startsWith("http://")
@@ -30,7 +30,7 @@ function buildTerminalRelay(): TerminalRelay {
       : relayBase.startsWith("https://")
         ? "wss://" + relayBase.slice("https://".length)
         : relayBase;
-    const url = `${wsBase}/pi-agent-relay`;
+    const url = `${wsBase}/vi-agent-relay`;
     console.log(`[DirectTerminal] Using relay terminal subscriber: ${url}`);
     const sub = new RelayTerminalSubscriber(url, relayToken);
     sub.start();
@@ -44,7 +44,7 @@ function buildTerminalRelay(): TerminalRelay {
  * Create the direct terminal WebSocket server.
  * Hosts two WebSocket paths:
  *   /mux           — browser-facing mux (xterm.js DirectTerminal)
- *   /pi-agent-relay — pi-agent relay connections for remote terminals
+ *   /vi-agent-relay — vi-agent relay connections for remote terminals
  *
  * Separated from listen() so tests can control lifecycle.
  */
@@ -105,7 +105,7 @@ export function createDirectTerminalServer(tmuxPath?: string): DirectTerminalSer
       muxWss.handleUpgrade(request, socket, head, (ws) => {
         muxWss!.emit("connection", ws, request);
       });
-    } else if (pathname === "/pi-agent-relay" && relay instanceof RemoteTerminalRelay) {
+    } else if (pathname === "/vi-agent-relay" && relay instanceof RemoteTerminalRelay) {
       relay.handleUpgrade(request, socket as never, head);
     } else {
       socket.destroy();

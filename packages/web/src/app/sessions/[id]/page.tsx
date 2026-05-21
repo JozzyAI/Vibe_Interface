@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { notFound, useParams } from "next/navigation";
 
 import { SessionDetail } from "@/components/SessionDetail";
-import { type DashboardSession, type PIActivityState, getAttentionLevel, type AttentionLevel } from "@/lib/types";
+import { type DashboardSession, type VIActivityState, getAttentionLevel, type AttentionLevel } from "@/lib/types";
 import { activityIcon } from "@/lib/activity-icons";
 import type { ProjectInfo } from "@/lib/project-name";
 import { getSessionTitle } from "@/lib/format";
@@ -18,7 +18,7 @@ function truncate(s: string, max: number): string {
 function buildSessionTitle(
   session: DashboardSession,
   prefixByProject: Map<string, string>,
-  activityOverride?: PIActivityState | null,
+  activityOverride?: VIActivityState | null,
 ): string {
   const id = session.id;
   const activity = activityOverride !== undefined ? activityOverride : session.activity;

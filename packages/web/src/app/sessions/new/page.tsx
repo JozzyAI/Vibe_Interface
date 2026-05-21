@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { PISessionCreator } from "@/components/PISessionCreator";
-import { getPISessionSidebarCount, PISessionSidebar } from "@/components/PISessionSidebar";
-import { PIWorkspaceShell } from "@/components/PIWorkspaceShell";
+import { VISessionCreator } from "@/components/VISessionCreator";
+import { getVISessionSidebarCount, VISessionSidebar } from "@/components/VISessionSidebar";
+import { VIWorkspaceShell } from "@/components/VIWorkspaceShell";
 import { getDashboardPageData } from "@/lib/dashboard-page-data";
-import { getPIApprovalHubData } from "@/lib/pi-approval-hub";
-import { getPIIdeaExecutionRoot } from "@/lib/pi-ideas";
-import { readPIWorkspaceFiles } from "@/lib/pi-workspace-files";
+import { getVIApprovalHubData } from "@/lib/vi-approval-hub";
+import { getVIIdeaExecutionRoot } from "@/lib/vi-ideas";
+import { readVIWorkspaceFiles } from "@/lib/vi-workspace-files";
 import { getRemoteApprovalOverview } from "@/lib/backend";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export default async function AddSessionPage() {
       return {
         projectId: project.id,
         projectName: project.name,
-        hub: await getPIApprovalHubData({
+        hub: await getVIApprovalHubData({
           projectId: project.id,
           sessions: projectPageData.sessions,
           controlPlane: projectPageData.controlPlane,
@@ -32,18 +32,18 @@ export default async function AddSessionPage() {
       };
     }),
   );
-  const workspaceRoot = getPIIdeaExecutionRoot();
+  const workspaceRoot = getVIIdeaExecutionRoot();
   const [remoteOverview, workspaceFiles] = await Promise.all([
     getRemoteApprovalOverview(),
-    readPIWorkspaceFiles(workspaceRoot),
+    readVIWorkspaceFiles(workspaceRoot),
   ]);
   const connectedCount = remoteOverview.agents.filter(
     (agent) => agent.connectionState === "connected",
   ).length;
-  const sessionCount = getPISessionSidebarCount(cards, remoteOverview);
+  const sessionCount = getVISessionSidebarCount(cards, remoteOverview);
 
   return (
-    <PIWorkspaceShell
+    <VIWorkspaceShell
       active="sessions"
       title="Add session"
       subtitle="Start a new coding-agent session on any connected machine."
@@ -53,7 +53,7 @@ export default async function AddSessionPage() {
       workspaceRoot={workspaceRoot}
       workspaceFiles={workspaceFiles}
       sidebarContent={
-        <PISessionSidebar
+        <VISessionSidebar
           cards={cards}
           remoteOverview={remoteOverview}
           activeHref="/sessions/new"
@@ -61,11 +61,11 @@ export default async function AddSessionPage() {
       }
       sidebarFooter={`${sessionCount} session${sessionCount === 1 ? "" : "s"} shown`}
     >
-      <PISessionCreator
+      <VISessionCreator
         initialRemoteOverview={remoteOverview}
         workspaceRoot={workspaceRoot}
-        claudeDefaultModel={process.env["PI_CLAUDE_DEFAULT_MODEL"]?.trim() || undefined}
+        claudeDefaultModel={process.env["VI_CLAUDE_DEFAULT_MODEL"]?.trim() || undefined}
       />
-    </PIWorkspaceShell>
+    </VIWorkspaceShell>
   );
 }

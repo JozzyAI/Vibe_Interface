@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { PIApprovalInbox } from "@/components/PIApprovalInbox";
-import { PIWorkspaceShell } from "@/components/PIWorkspaceShell";
+import { VIApprovalInbox } from "@/components/VIApprovalInbox";
+import { VIWorkspaceShell } from "@/components/VIWorkspaceShell";
 import {
   getDashboardPageData,
 } from "@/lib/dashboard-page-data";
-import { getPIApprovalHubData } from "@/lib/pi-approval-hub";
-import { getPIIdeaExecutionRoot } from "@/lib/pi-ideas";
-import { readPIWorkspaceFiles } from "@/lib/pi-workspace-files";
+import { getVIApprovalHubData } from "@/lib/vi-approval-hub";
+import { getVIIdeaExecutionRoot } from "@/lib/vi-ideas";
+import { readVIWorkspaceFiles } from "@/lib/vi-workspace-files";
 import { getRemoteApprovalOverview } from "@/lib/backend";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export default async function ApprovalHubPage(props: {
       return {
         projectId: project.id,
         projectName: project.name,
-        hub: await getPIApprovalHubData({
+        hub: await getVIApprovalHubData({
           projectId: project.id,
           sessions: projectPageData.sessions,
           controlPlane: projectPageData.controlPlane,
@@ -42,17 +42,17 @@ export default async function ApprovalHubPage(props: {
       };
     }),
   );
-  const workspaceRoot = getPIIdeaExecutionRoot();
+  const workspaceRoot = getVIIdeaExecutionRoot();
   const [remoteOverview, workspaceFiles] = await Promise.all([
     getRemoteApprovalOverview(),
-    readPIWorkspaceFiles(workspaceRoot),
+    readVIWorkspaceFiles(workspaceRoot),
   ]);
   const connectedCount = remoteOverview.agents.filter(
     (agent) => agent.connectionState === "connected",
   ).length;
 
   return (
-    <PIWorkspaceShell
+    <VIWorkspaceShell
       active="sessions"
       title="Sessions"
       subtitle="Approvals are blockers inside sessions. Handle them here, then jump back into the live CLI."
@@ -62,7 +62,7 @@ export default async function ApprovalHubPage(props: {
       workspaceRoot={workspaceRoot}
       workspaceFiles={workspaceFiles}
     >
-      <PIApprovalInbox initialCards={cards} initialRemoteOverview={remoteOverview} />
-    </PIWorkspaceShell>
+      <VIApprovalInbox initialCards={cards} initialRemoteOverview={remoteOverview} />
+    </VIWorkspaceShell>
   );
 }

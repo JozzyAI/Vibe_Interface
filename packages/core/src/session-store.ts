@@ -1,35 +1,35 @@
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getPISessionsRegistryDir } from "./paths.js";
-import { createMockPISessions, type PISession } from "./types.js";
+import { getVISessionsRegistryDir } from "./paths.js";
+import { createMockVISessions, type VISession } from "./types.js";
 
 function sessionPath(sessionId: string): string {
-  return join(getPISessionsRegistryDir(), `${sessionId}.json`);
+  return join(getVISessionsRegistryDir(), `${sessionId}.json`);
 }
 
 async function ensureDir(): Promise<void> {
-  await mkdir(getPISessionsRegistryDir(), { recursive: true });
+  await mkdir(getVISessionsRegistryDir(), { recursive: true });
 }
 
-export async function listPISessions(): Promise<PISession[]> {
+export async function listVISessions(): Promise<VISession[]> {
   await ensureDir();
   let entries: string[];
   try {
-    entries = await readdir(getPISessionsRegistryDir());
+    entries = await readdir(getVISessionsRegistryDir());
   } catch {
-    return getMockPISessions();
+    return getMockVISessions();
   }
 
   const jsonFiles = entries.filter((f) => f.endsWith(".json"));
   if (jsonFiles.length === 0) {
-    return getMockPISessions();
+    return getMockVISessions();
   }
 
   const sessions = await Promise.all(
     jsonFiles.map(async (file) => {
       try {
-        const content = await readFile(join(getPISessionsRegistryDir(), file), "utf8");
-        return JSON.parse(content) as PISession;
+        const content = await readFile(join(getVISessionsRegistryDir(), file), "utf8");
+        return JSON.parse(content) as VISession;
       } catch {
         return null;
       }
@@ -37,25 +37,25 @@ export async function listPISessions(): Promise<PISession[]> {
   );
 
   return sessions
-    .filter((s): s is PISession => s !== null)
+    .filter((s): s is VISession => s !== null)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export async function getPISession(id: string): Promise<PISession | null> {
+export async function getVISession(id: string): Promise<VISession | null> {
   try {
     const content = await readFile(sessionPath(id), "utf8");
-    return JSON.parse(content) as PISession;
+    return JSON.parse(content) as VISession;
   } catch {
     return null;
   }
 }
 
-export async function upsertPISession(session: PISession): Promise<void> {
+export async function upsertVISession(session: VISession): Promise<void> {
   await ensureDir();
   await writeFile(sessionPath(session.id), JSON.stringify(session, null, 2), "utf8");
 }
 
-export async function deletePISession(id: string): Promise<void> {
+export async function deleteVISession(id: string): Promise<void> {
   try {
     await unlink(sessionPath(id));
   } catch {
@@ -63,6 +63,6 @@ export async function deletePISession(id: string): Promise<void> {
   }
 }
 
-export function getMockPISessions(): PISession[] {
-  return createMockPISessions();
+export function getMockVISessions(): VISession[] {
+  return createMockVISessions();
 }

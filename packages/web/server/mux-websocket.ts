@@ -214,7 +214,7 @@ interface ManagedTerminal {
   id: string;
   tmuxSessionId: string;
   pty: IPty | null;
-  /** True when this terminal is served by a remote pi-agent relay, not local node-pty. */
+  /** True when this terminal is served by a remote vi-agent relay, not local node-pty. */
   isRemote: boolean;
   /** Cleanup function returned by remoteRelay.subscribeRemote() — undefined for local terminals. */
   relayUnsub?: () => void;
@@ -455,7 +455,7 @@ class TerminalManager {
     );
     terminal.relayUnsub = relayUnsub;
 
-    // Send terminal_open to pi-agent (pi-agent will start PTY attach)
+    // Send terminal_open to vi-agent (vi-agent will start PTY attach)
     // cols/rows use safe defaults; DirectTerminal sends a resize immediately after open.
     this.remoteRelay!.openRemote(id, 80, 24);
     console.log(`[MuxServer] Opened remote terminal ${id} via relay`);
@@ -464,7 +464,7 @@ class TerminalManager {
 
   /**
    * Write data to the terminal.
-   * Local: writes to PTY. Remote: forwards to pi-agent relay.
+   * Local: writes to PTY. Remote: forwards to vi-agent relay.
    */
   write(id: string, data: string): void {
     const terminal = this.terminals.get(id);
@@ -477,7 +477,7 @@ class TerminalManager {
 
   /**
    * Resize the terminal.
-   * Local: resizes PTY. Remote: sends terminal_resize to pi-agent.
+   * Local: resizes PTY. Remote: sends terminal_resize to vi-agent.
    */
   resize(id: string, cols: number, rows: number): void {
     const terminal = this.terminals.get(id);
@@ -516,7 +516,7 @@ class TerminalManager {
           terminal.pty.kill();
           terminal.pty = null;
         } else if (terminal.isRemote) {
-          // Remote: tell pi-agent to close PTY, clean up relay subscription
+          // Remote: tell vi-agent to close PTY, clean up relay subscription
           this.remoteRelay?.closeRemote(id);
           terminal.relayUnsub?.();
           terminal.relayUnsub = undefined;
@@ -585,7 +585,7 @@ class TerminalManager {
  * Returns the WebSocketServer instance for manual upgrade routing.
  *
  * @param tmuxPath   - Path to tmux binary (auto-detected if omitted)
- * @param remoteRelay - Optional relay for routing remote pi-agent terminal sessions
+ * @param remoteRelay - Optional relay for routing remote vi-agent terminal sessions
  */
 export function createMuxWebSocket(
   tmuxPath?: string,
@@ -706,7 +706,7 @@ export function createMuxWebSocket(
               } catch (openErr) {
                 // Session not found locally or on relay. If the relay is the likely
                 // cause (no local tmux session either), queue a retry for when the
-                // relay announces it (e.g. after pi-agent reconnects post-restart).
+                // relay announces it (e.g. after vi-agent reconnects post-restart).
                 const isRelayMiss =
                   openErr instanceof Error &&
                   openErr.message.includes("not found") &&

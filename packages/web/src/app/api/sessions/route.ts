@@ -1,4 +1,4 @@
-import { listPISessions, upsertPISession, type PISession } from "@pi/core";
+import { listVISessions, upsertVISession, type VISession } from "@vi/core";
 import { getServices } from "@/lib/services";
 import { getCorrelationId, jsonWithCorrelation } from "@/lib/observability";
 import { filterProjectSessions } from "@/lib/project-utils";
@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const projectFilter = searchParams.get("project") ?? undefined;
     const { config } = await getServices();
-    const all = await listPISessions();
+    const all = await listVISessions();
     const sessions = filterProjectSessions(all, projectFilter, config.projects);
     const pageData = await getDashboardPageData(projectFilter);
     return jsonWithCorrelation(
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const correlationId = getCorrelationId(request);
   try {
-    const body = (await request.json()) as Partial<PISession & { prompt: string }>;
+    const body = (await request.json()) as Partial<VISession & { prompt: string }>;
     const { sessionManager } = await getServices();
     const session = await sessionManager.spawn({
       projectId: body.projectId ?? "default",

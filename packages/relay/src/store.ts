@@ -3,7 +3,7 @@
  *
  * All read/write operations against the SQLite DB.
  * Returns plain objects whose shapes match the existing dashboard wire format
- * so pi-agent and the dashboard client need zero changes.
+ * so vi-agent and the dashboard client need zero changes.
  *
  * Design notes:
  * - provider belongs to jobs, not agents.  tool_type on agents is legacy/opaque.
@@ -763,7 +763,7 @@ export function createEnrollment(input: {
 
   // Derive relay URL and token from env if not provided
   const relayUrl = input.relayUrl ?? deriveRelayPublicWsUrl() ?? null;
-  const relayToken = input.relayToken ?? process.env["PI_RELAY_DAEMON_TOKEN"]?.trim() ?? daemonTokenFromRelayTokens() ?? null;
+  const relayToken = input.relayToken ?? process.env["VI_RELAY_DAEMON_TOKEN"]?.trim() ?? daemonTokenFromRelayTokens() ?? null;
 
   db.prepare(`
     INSERT INTO enrollments (
@@ -832,16 +832,16 @@ export function listRecentEnrollments(limit = 12) {
 }
 
 function normalizeRelayTerminalWsUrl(relayUrl: string): string {
-  // Strip /ws or /pi-agent-relay suffix, then append /pi-agent-relay
+  // Strip /ws or /vi-agent-relay suffix, then append /vi-agent-relay
   const base = relayUrl
-    .replace(/\/pi-agent-relay$/, "")
+    .replace(/\/vi-agent-relay$/, "")
     .replace(/\/ws$/, "")
     .replace(/\/$/, "");
   // Convert http(s) → ws(s) if needed
   const ws = base.startsWith("http://") ? "ws://" + base.slice(7)
     : base.startsWith("https://") ? "wss://" + base.slice(8)
     : base;
-  return `${ws}/pi-agent-relay`;
+  return `${ws}/vi-agent-relay`;
 }
 
 function buildPairCommands(enrollment: ReturnType<typeof serializeEnrollment>) {
@@ -851,13 +851,13 @@ function buildPairCommands(enrollment: ReturnType<typeof serializeEnrollment>) {
   // than silently producing a pair command pointing at localhost:3000.
   const serverOrigin = relayPublicUrl ?? null;
   if (!serverOrigin) {
-    const errCmd = "# ERROR: PI_RELAY_BASE_URL (or PI_RELAY_PUBLIC_WS_URL) not set on relay — cannot generate pair command";
+    const errCmd = "# ERROR: VI_RELAY_BASE_URL (or VI_RELAY_PUBLIC_WS_URL) not set on relay — cannot generate pair command";
     return { pairCommand: errCmd, advancedCommand: errCmd, relayUrl: enrollment.relayUrl ?? "" };
   }
 
-  const pairCommand = `pi-agent pair --server ${serverOrigin} --code ${enrollment.code} --start`;
+  const pairCommand = `vi-agent pair --server ${serverOrigin} --code ${enrollment.code} --start`;
   const advancedCommand = enrollment.relayUrl
-    ? `PI_TERMINAL_RELAY_URL=${normalizeRelayTerminalWsUrl(enrollment.relayUrl)} \\\n  ${pairCommand}`
+    ? `VI_TERMINAL_RELAY_URL=${normalizeRelayTerminalWsUrl(enrollment.relayUrl)} \\\n  ${pairCommand}`
     : pairCommand;
   return { pairCommand, advancedCommand, relayUrl: enrollment.relayUrl ?? "" };
 }
@@ -967,9 +967,9 @@ export function getOverview() {
 
 function deriveRelayPublicWsUrl(): string | null {
   const raw = (
-    process.env["PI_RELAY_PUBLIC_WS_URL"] ??
-    process.env["PI_RELAY_URL"] ??
-    process.env["PI_RELAY_BASE_URL"] ??
+    process.env["VI_RELAY_PUBLIC_WS_URL"] ??
+    process.env["VI_RELAY_URL"] ??
+    process.env["VI_RELAY_BASE_URL"] ??
     ""
   ).trim().replace(/\/$/, "");
   if (!raw) return null;
@@ -982,9 +982,9 @@ function deriveRelayPublicWsUrl(): string | null {
 
 function deriveRelayPublicHttpUrl(): string | null {
   const raw = (
-    process.env["PI_RELAY_PUBLIC_WS_URL"] ??
-    process.env["PI_RELAY_URL"] ??
-    process.env["PI_RELAY_BASE_URL"] ??
+    process.env["VI_RELAY_PUBLIC_WS_URL"] ??
+    process.env["VI_RELAY_URL"] ??
+    process.env["VI_RELAY_BASE_URL"] ??
     ""
   ).trim().replace(/\/$/, "");
   if (!raw) return null;
@@ -994,7 +994,7 @@ function deriveRelayPublicHttpUrl(): string | null {
 }
 
 function daemonTokenFromRelayTokens(): string | null {
-  const raw = process.env["PI_RELAY_TOKENS"]?.trim();
+  const raw = process.env["VI_RELAY_TOKENS"]?.trim();
   if (!raw) return null;
   for (const entry of raw.split(",")) {
     const parts = entry.trim().split(":");

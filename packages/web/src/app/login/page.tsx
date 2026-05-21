@@ -77,7 +77,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-5 text-center text-[11px] text-[var(--color-text-muted)]">
-          Set <code className="font-mono">PI_ACCESS_TOKEN</code> in your environment to enable auth
+          Set <code className="font-mono">VI_ACCESS_TOKEN</code> in your environment to enable auth
         </p>
       </div>
     </div>

@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ["@pi/core"],
+  transpilePackages: ["@vi/core"],
   turbopack: {
     resolveAlias: {
-      "@pi/core": "../core/dist/index.js",
+      "@vi/core": "../core/dist/index.js",
     },
   },
   async headers() {

@@ -5,16 +5,16 @@
 
 // Re-export PI core types used throughout the dashboard
 export type {
-  PISession,
-  PISessionState,
-  PIRequestKind,
-  PIRequestStatus,
-  PIActivityState,
-  PISessionStatus,
+  VISession,
+  VISessionState,
+  VIRequestKind,
+  VIRequestStatus,
+  VIActivityState,
+  VISessionStatus,
   CIStatus,
-} from "@pi/core";
+} from "@vi/core";
 
-import type { PISessionState, PISessionStatus, PIActivityState, CIStatus } from "@pi/core";
+import type { VISessionState, VISessionStatus, VIActivityState, CIStatus } from "@vi/core";
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
@@ -31,19 +31,19 @@ export type PRState = "open" | "merged" | "closed";
 export type AttentionLevel = "merge" | "respond" | "review" | "pending" | "working" | "done";
 
 export const SESSION_STATUS = {
-  ERRORED: "errored" as PISessionStatus,
-  NEEDS_INPUT: "needs_input" as PISessionStatus,
-  STUCK: "stuck" as PISessionStatus,
-  MERGED: "merged" as PISessionStatus,
-  DONE: "done" as PISessionStatus,
+  ERRORED: "errored" as VISessionStatus,
+  NEEDS_INPUT: "needs_input" as VISessionStatus,
+  STUCK: "stuck" as VISessionStatus,
+  MERGED: "merged" as VISessionStatus,
+  DONE: "done" as VISessionStatus,
 } as const;
 
 export const ACTIVITY_STATE = {
-  WAITING_INPUT: "waiting_input" as PIActivityState,
-  BLOCKED: "blocked" as PIActivityState,
-  EXITED: "exited" as PIActivityState,
-  ACTIVE: "active" as PIActivityState,
-  IDLE: "idle" as PIActivityState,
+  WAITING_INPUT: "waiting_input" as VIActivityState,
+  BLOCKED: "blocked" as VIActivityState,
+  EXITED: "exited" as VIActivityState,
+  ACTIVE: "active" as VIActivityState,
+  IDLE: "idle" as VIActivityState,
 } as const;
 
 export const CI_STATUS = {
@@ -52,11 +52,11 @@ export const CI_STATUS = {
   PENDING: "pending" as CIStatus,
 } as const;
 
-export const TERMINAL_STATUSES: ReadonlySet<PISessionStatus> = new Set([
+export const TERMINAL_STATUSES: ReadonlySet<VISessionStatus> = new Set([
   "killed", "terminated", "done", "cleanup", "errored", "merged",
 ]);
-export const TERMINAL_ACTIVITIES: ReadonlySet<PIActivityState> = new Set(["exited"]);
-export const NON_RESTORABLE_STATUSES: ReadonlySet<PISessionStatus> = new Set(["merged"]);
+export const TERMINAL_ACTIVITIES: ReadonlySet<VIActivityState> = new Set(["exited"]);
+export const NON_RESTORABLE_STATUSES: ReadonlySet<VISessionStatus> = new Set(["merged"]);
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
@@ -64,9 +64,9 @@ export const NON_RESTORABLE_STATUSES: ReadonlySet<PISessionStatus> = new Set(["m
 export interface DashboardSession {
   id: string;
   projectId: string;
-  status: PISessionStatus;
-  piState?: PISessionState;
-  activity: PIActivityState | null;
+  status: VISessionStatus;
+  piState?: VISessionState;
+  activity: VIActivityState | null;
   branch: string | null;
   issueId: string | null;
   issueUrl: string | null;
@@ -85,13 +85,13 @@ export interface DashboardSession {
 // PI inbox / control plane types
 // ---------------------------------------------------------------------------
 
-export interface PIInboxItem {
+export interface VIInboxItem {
   requestId: string;
   sessionId: string;
   projectId: string;
   sessionTitle: string;
-  kind: PIRequestKind;
-  status: PIRequestStatus;
+  kind: VIRequestKind;
+  status: VIRequestStatus;
   title: string;
   message: string;
   createdAt: string;
@@ -99,18 +99,18 @@ export interface PIInboxItem {
   response?: string;
 }
 
-export interface PIRecoveryItem {
+export interface VIRecoveryItem {
   sessionId: string;
   projectId: string;
   sessionTitle: string;
-  piState: PISessionState;
-  aoStatus: PISessionStatus;
+  piState: VISessionState;
+  aoStatus: VISessionStatus;
   lastActivityAt: string;
   summary: string | null;
   restoreAvailable: boolean;
 }
 
-export interface PIBacklogItem {
+export interface VIBacklogItem {
   projectId: string;
   issueId: string;
   title: string;
@@ -118,7 +118,7 @@ export interface PIBacklogItem {
   labels: string[];
 }
 
-export interface PIGitHubConnectorSummary {
+export interface VIGitHubConnectorSummary {
   id: string;
   label: string;
   host: string;
@@ -132,14 +132,14 @@ export interface PIGitHubConnectorSummary {
   isSelected: boolean;
 }
 
-export interface PIGitHubConnectorState {
+export interface VIGitHubConnectorState {
   available: boolean;
   projectId?: string;
   selectedConnectorId: string | null;
-  connectors: PIGitHubConnectorSummary[];
+  connectors: VIGitHubConnectorSummary[];
 }
 
-export interface PIIdeaDraft {
+export interface VIIdeaDraft {
   order: number;
   title: string;
   description: string;
@@ -148,7 +148,7 @@ export interface PIIdeaDraft {
   stage: string;
 }
 
-export interface PIIdeaPlanPayload {
+export interface VIIdeaPlanPayload {
   id: string;
   projectId: string;
   title: string;
@@ -156,71 +156,71 @@ export interface PIIdeaPlanPayload {
   priority: string;
   source: string;
   labels: string[];
-  issues: PIIdeaDraft[];
+  issues: VIIdeaDraft[];
 }
 
-export type PIIdeaStatus = "idea_bank" | "project_queue" | "working" | "done";
+export type VIIdeaStatus = "idea_bank" | "project_queue" | "working" | "done";
 
-export interface PIIdeaCard {
+export interface VIIdeaCard {
   id: string;
   title: string;
   markdown: string;
   excerpt: string;
-  status: PIIdeaStatus;
+  status: VIIdeaStatus;
   createdAt: string;
   updatedAt: string;
   sessionId?: string;
   sessionStatus?: string | null;
 }
 
-export interface PIIdeaBoardColumnData {
-  id: PIIdeaStatus;
+export interface VIIdeaBoardColumnData {
+  id: VIIdeaStatus;
   title: string;
   description: string;
-  ideas: PIIdeaCard[];
+  ideas: VIIdeaCard[];
 }
 
-export interface PIIdeaBoardData {
+export interface VIIdeaBoardData {
   projectId: string;
   generatedAt: string;
-  columns: PIIdeaBoardColumnData[];
+  columns: VIIdeaBoardColumnData[];
 }
 
-export interface PIControlPlaneData {
+export interface VIControlPlaneData {
   generatedAt: string;
   projectId?: string;
   counts: { inbox: number; recovery: number; backlog: number };
-  github: PIGitHubConnectorState;
-  inbox: PIInboxItem[];
-  recovery: PIRecoveryItem[];
-  backlog: PIBacklogItem[];
+  github: VIGitHubConnectorState;
+  inbox: VIInboxItem[];
+  recovery: VIRecoveryItem[];
+  backlog: VIBacklogItem[];
 }
 
 // ---------------------------------------------------------------------------
 // Approval hub types
 // ---------------------------------------------------------------------------
 
-export type PIApprovalPermissionMode = "manual" | "timeout_allow" | "always_allow";
-export type PIApprovalRiskLevel = "low" | "medium" | "high" | "critical";
-export type PIApprovalEventType =
+export type VIApprovalPermissionMode = "manual" | "timeout_allow" | "always_allow";
+export type VIApprovalRiskLevel = "low" | "medium" | "high" | "critical";
+export type VIApprovalEventType =
   | "command" | "network_access" | "dependency_install" | "git_push"
   | "delete_operation" | "plan_approval" | "final_approval"
   | "scope_clarification" | "example_request" | "external_action" | "generic";
-export type PIApprovalPrimaryAction = "approve" | "reply";
+export type VIApprovalPrimaryAction = "approve" | "reply";
 export type PIExternalActionKind =
   | "github_auth" | "codex_update" | "install_tool" | "open_browser_login"
   | "run_host_setup" | "other";
 
-export interface PIApprovalPolicySummary {
+export interface VIApprovalPolicySummary {
   scopeType: "project" | "session";
   scopeId: string;
   label: string;
-  mode: PIApprovalPermissionMode;
+  mode: VIApprovalPermissionMode;
   timeoutSeconds: number;
   updatedAt: string;
 }
 
-export interface PIApprovalAuditEntry {
+export interface VIApprovalAuditEntry {
   id: string;
   createdAt: string;
   actorLabel: string;
@@ -231,35 +231,35 @@ export interface PIApprovalAuditEntry {
   requestId?: string;
 }
 
-export interface PIApprovalFleetItem {
+export interface VIApprovalFleetItem {
   sessionId: string;
   projectId: string;
   sessionTitle: string;
-  status: PISessionStatus;
-  piState?: PISessionState;
+  status: VISessionStatus;
+  piState?: VISessionState;
   toolType: string;
   hostLabel: string;
   repoRoot?: string;
   branch?: string;
   worktree?: string;
   summary: string | null;
-  permissionMode: PIApprovalPermissionMode;
+  permissionMode: VIApprovalPermissionMode;
   timeoutSeconds: number;
   pendingApprovalCount: number;
-  riskLevel: PIApprovalRiskLevel;
+  riskLevel: VIApprovalRiskLevel;
   lastActivityAt: string;
 }
 
-export interface PIApprovalInboxEntry extends PIInboxItem {
+export interface VIApprovalInboxEntry extends VIInboxItem {
   actionLabel: string;
-  riskLevel: PIApprovalRiskLevel;
-  permissionMode: PIApprovalPermissionMode;
+  riskLevel: VIApprovalRiskLevel;
+  permissionMode: VIApprovalPermissionMode;
   timeoutSeconds: number;
   sourceType: "pi_request" | "native_command";
   nativeCommand?: string | null;
   context: {
-    eventType: PIApprovalEventType;
-    primaryAction: PIApprovalPrimaryAction;
+    eventType: VIApprovalEventType;
+    primaryAction: VIApprovalPrimaryAction;
     command?: string | null;
     toolType?: string | null;
     repoRoot?: string | null;
@@ -269,19 +269,19 @@ export interface PIApprovalInboxEntry extends PIInboxItem {
   };
 }
 
-export interface PIApprovalHubData {
+export interface VIApprovalHubData {
   generatedAt: string;
   projectId: string;
   stats: {
     agents: number; running: number; awaitingApproval: number;
     awaitingInput: number; failed: number; completed: number; inbox: number;
   };
-  projectPolicy: PIApprovalPolicySummary;
-  fleet: PIApprovalFleetItem[];
-  inbox: PIApprovalInboxEntry[];
-  recovery: PIRecoveryItem[];
-  policies: PIApprovalPolicySummary[];
-  history: PIApprovalAuditEntry[];
+  projectPolicy: VIApprovalPolicySummary;
+  fleet: VIApprovalFleetItem[];
+  inbox: VIApprovalInboxEntry[];
+  recovery: VIRecoveryItem[];
+  policies: VIApprovalPolicySummary[];
+  history: VIApprovalAuditEntry[];
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +306,7 @@ export interface RemoteAgentSummary {
   agentId: string; displayName: string; projectLabel: string; toolType: string;
   hostLabel: string; repoRoot?: string; branch?: string; worktree?: string;
   stateFile?: string; logFile?: string; status: RemoteAgentStatus;
-  lastSeenAt: string; permissionMode: PIApprovalPermissionMode;
+  lastSeenAt: string; permissionMode: VIApprovalPermissionMode;
   timeoutSeconds: number; pendingApprovalCount: number;
   connectionState: RemoteAgentConnectionState;
   consecutiveFailures?: number; lastError?: string; nextRetryAt?: string;
@@ -330,10 +330,10 @@ export interface RemoteAgentSessionHistoryItem {
 
 export interface RemoteApprovalRequest {
   requestId: string; agentId: string; parentJobId?: string; createdJobId?: string;
-  title: string; message: string; riskLevel: PIApprovalRiskLevel;
+  title: string; message: string; riskLevel: VIApprovalRiskLevel;
   command?: string | null; actionKind?: PIExternalActionKind;
   suggestedCommand?: string | null; helperPrompt?: string | null;
-  eventType?: PIApprovalEventType; primaryAction?: PIApprovalPrimaryAction;
+  eventType?: VIApprovalEventType; primaryAction?: VIApprovalPrimaryAction;
   status: "open" | "approved" | "rejected"; createdAt: string; updatedAt: string; response?: string;
 }
 
@@ -439,14 +439,14 @@ export interface DashboardOrchestratorLink {
 export interface SSESnapshotEvent {
   type: "snapshot"; correlationId?: string; emittedAt?: string;
   sessions: Array<{
-    id: string; status: PISessionStatus; activity: PIActivityState | null;
+    id: string; status: VISessionStatus; activity: VIActivityState | null;
     attentionLevel: AttentionLevel; lastActivityAt: string;
   }>;
 }
 
 export interface SSEActivityEvent {
   type: "session.activity"; sessionId: string;
-  activity: PIActivityState | null; status: PISessionStatus;
+  activity: VIActivityState | null; status: VISessionStatus;
   attentionLevel: AttentionLevel; timestamp: string;
 }
 
@@ -502,4 +502,4 @@ export function getAttentionLevel(session: DashboardSession): AttentionLevel {
 }
 
 // Import these after defining them to avoid forward-reference issues
-import type { PIRequestKind, PIRequestStatus } from "@pi/core";
+import type { VIRequestKind, VIRequestStatus } from "@vi/core";

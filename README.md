@@ -1,9 +1,9 @@
-# Project Interface (PI)
+# Vibe Interface (PI)
 
 PI is a multi-agent coding operations dashboard. It gives you one place to launch AI coding sessions (Claude Code, Codex CLI), watch live terminals, handle approval requests, and manage many machines — from any browser.
 
 - **Dashboard** — Next.js web UI. Shows machines, sessions, approvals.
-- **pi-agent** — Python daemon. Runs on any machine. Launches agents, streams terminal, polls for jobs.
+- **vi-agent** — Python daemon. Runs on any machine. Launches agents, streams terminal, polls for jobs.
 - **Relay** — Optional cloud control plane. Lets dashboard and agents connect across networks without a shared LAN.
 
 ---
@@ -16,21 +16,21 @@ PI is a multi-agent coding operations dashboard. It gives you one place to launc
 browser
   └─ dashboard :3000  ─── store.json  (source of truth)
                       ─── DirectTerminal WS :14801
-                               └─ tmux ← pi-agent (same LAN)
+                               └─ tmux ← vi-agent (same LAN)
 ```
 
-pi-agent and dashboard must be reachable from each other. No external service needed.
+vi-agent and dashboard must be reachable from each other. No external service needed.
 
 ### Cloud mode (across networks)
 
 ```
 browser
-  └─ dashboard :3000  ──→  PI Relay (Fly.io)  ←──  pi-agent (any machine)
+  └─ dashboard :3000  ──→  VI Relay (Fly.io)  ←──  vi-agent (any machine)
                                └─ SQLite
-                               └─ /pi-agent-relay WS  (terminal stream)
+                               └─ /vi-agent-relay WS  (terminal stream)
 ```
 
-pi-agent connects outbound to the relay. The dashboard also connects outbound. Neither side needs a public IP or open inbound port.
+vi-agent connects outbound to the relay. The dashboard also connects outbound. Neither side needs a public IP or open inbound port.
 
 ---
 
@@ -65,7 +65,7 @@ npm install
 
 ```bash
 # packages/web/.env.local  (create this file — it is gitignored)
-PI_PUBLIC_URL=http://192.168.1.83:3000   # your machine's LAN IP
+VI_PUBLIC_URL=http://192.168.1.83:3000   # your machine's LAN IP
 ```
 
 ### 3. Start the dashboard
@@ -81,13 +81,13 @@ This starts two processes concurrently:
 
 Open `http://localhost:3000` (or your LAN IP if accessing from another device).
 
-### 4. Install pi-agent
+### 4. Install vi-agent
 
 On the machine that will run AI sessions (can be the same machine):
 
 ```bash
-pip install -e bridges/pi-agent
-pi-agent --help   # verify install
+pip install -e bridges/vi-agent
+vi-agent --help   # verify install
 ```
 
 ### 5. Enroll a machine
@@ -95,7 +95,7 @@ pi-agent --help   # verify install
 In the dashboard, go to **Machines → Add machine**. Copy the generated pair command:
 
 ```
-pi-agent pair --server http://192.168.1.83:3000 --code XXXX1234ABCD --start
+vi-agent pair --server http://192.168.1.83:3000 --code XXXX1234ABCD --start
 ```
 
 Run it on the target machine. The `--start` flag starts the background daemon immediately after pairing.
@@ -111,7 +111,7 @@ Run it on the target machine. The `--start` flag starts the background daemon im
 
 ## Quickstart: Cloud Mode
 
-Use this when pi-agent machines cannot reach the dashboard directly (different networks, no fixed IP).
+Use this when vi-agent machines cannot reach the dashboard directly (different networks, no fixed IP).
 
 ### 1. Deploy the relay
 
@@ -123,20 +123,20 @@ Short version (Fly.io):
 cd packages/relay
 
 # Create persistent volume FIRST (required — without it the SQLite DB is wiped on every deploy)
-fly volumes create pi_relay_data --size 1 --region sin --app <your-app-name>
+fly volumes create vi_relay_data --size 1 --region sin --app <your-app-name>
 
 # Deploy
 fly deploy --ha=false --app <your-app-name>
 
 # Generate tokens (run each command once, keep the output secret)
 openssl rand -hex 32   # → DAEMON_TOKEN
-openssl rand -hex 32   # → PI_TOKEN
+openssl rand -hex 32   # → VI_TOKEN
 
 # Set secrets
 fly secrets set \
-  PI_RELAY_TOKENS="<DAEMON_TOKEN>:daemon:local-daemon,<PI_TOKEN>:pi:local-pi" \
-  PI_RELAY_OWNER_TOKEN="<PI_TOKEN>" \
-  PI_RELAY_PUBLIC_WS_URL="wss://your-app.fly.dev" \
+  VI_RELAY_TOKENS="<DAEMON_TOKEN>:daemon:local-daemon,<VI_TOKEN>:pi:local-pi" \
+  VI_RELAY_OWNER_TOKEN="<VI_TOKEN>" \
+  VI_RELAY_PUBLIC_WS_URL="wss://your-app.fly.dev" \
   --app <your-app-name>
 ```
 
@@ -144,10 +144,10 @@ fly secrets set \
 
 ```bash
 # packages/web/.env.local  — DO NOT COMMIT THIS FILE
-PI_RELAY_BASE_URL=https://your-app.fly.dev
-PI_RELAY_PI_TOKEN=<PI_TOKEN>
-PI_RELAY_DAEMON_TOKEN=<DAEMON_TOKEN>
-PI_RELAY_PUBLIC_WS_URL=wss://your-app.fly.dev
+VI_RELAY_BASE_URL=https://your-app.fly.dev
+VI_RELAY_VI_TOKEN=<VI_TOKEN>
+VI_RELAY_DAEMON_TOKEN=<DAEMON_TOKEN>
+VI_RELAY_PUBLIC_WS_URL=wss://your-app.fly.dev
 ```
 
 Restart the dashboard. The mode indicator in the sidebar should show **Cloud · your-app.fly.dev · connected**.
@@ -157,7 +157,7 @@ Restart the dashboard. The mode indicator in the sidebar should show **Cloud · 
 From the dashboard, **Machines → Add machine**. The generated pair command will automatically use the relay URL:
 
 ```
-pi-agent pair --server https://your-app.fly.dev --code XXXX1234ABCD --start
+vi-agent pair --server https://your-app.fly.dev --code XXXX1234ABCD --start
 ```
 
 Run it on any machine — it does not need to be on the same network as the dashboard.
@@ -170,44 +170,44 @@ Run it on any machine — it does not need to be on the same network as the dash
 
 ---
 
-## pi-agent
+## vi-agent
 
 ### Install
 
 ```bash
 # From the PI repo (editable install — picks up local changes)
-pip install -e bridges/pi-agent
+pip install -e bridges/vi-agent
 
 # Verify
-pi-agent --help
+vi-agent --help
 ```
 
 ### Core commands
 
 ```bash
 # Pair with a dashboard or relay (saves state file, optionally starts daemon)
-pi-agent pair --server http://192.168.1.83:3000 --code XXXX --start
-pi-agent pair --server https://relay.fly.dev --code XXXX --start
+vi-agent pair --server http://192.168.1.83:3000 --code XXXX --start
+vi-agent pair --server https://relay.fly.dev --code XXXX --start
 
 # Start daemon from saved state
-pi-agent start-daemon --state-file ~/.config/pi-agent/my-project-agent-my-machine.json
+vi-agent start-daemon --state-file ~/.config/vi-agent/my-project-agent-my-machine.json
 
 # Check running status
-pi-agent status
+vi-agent status
 
 # Stop daemon
-pi-agent stop-daemon --state-file ~/.config/pi-agent/my-project-agent-my-machine.json
+vi-agent stop-daemon --state-file ~/.config/vi-agent/my-project-agent-my-machine.json
 
 # Clean up state files for a removed agent
-pi-agent cleanup --state-file ~/.config/pi-agent/my-project-agent-my-machine.json
+vi-agent cleanup --state-file ~/.config/vi-agent/my-project-agent-my-machine.json
 ```
 
 ### State and log files
 
-Pairing creates files under `~/.config/pi-agent/`:
+Pairing creates files under `~/.config/vi-agent/`:
 
 ```
-~/.config/pi-agent/
+~/.config/vi-agent/
   <project>-agent-<name>.json    # state: agentId, relay URL, token
   <project>-agent-<name>.pid     # daemon PID
   <project>-agent-<name>.log     # daemon log
@@ -215,13 +215,13 @@ Pairing creates files under `~/.config/pi-agent/`:
     <jobId>.log                  # per-job log
 ```
 
-### pi-agent environment variables
+### vi-agent environment variables
 
 | Variable | Description |
 |----------|-------------|
-| `PI_AGENT_TOOL` | Default tool type if not set via `--tool` (`claude`, `codex`, `other`) |
-| `PI_TERMINAL_RELAY_URL` | Override terminal relay WebSocket URL (normally set automatically from pairing) |
-| `ANTHROPIC_API_KEY` | Required by Claude Code for non-interactive use |
+| `VI_AGENT_TOOL` | Default tool type if not set via `--tool` (`claude`, `codex`, `other`) |
+| `VI_TERMINAL_RELAY_URL` | Override terminal relay WebSocket URL (normally set automatically from pairing) |
+| `ANTHROPIC_AVI_KEY` | Required by Claude Code for non-interactive use |
 
 ---
 
@@ -264,19 +264,19 @@ If the dashboard runs inside WSL2 and you want to access it from Windows, iPad, 
 
 3. Access via the Windows machine's LAN IP: `http://192.168.x.x:3000`
 
-Set `PI_PUBLIC_URL=http://192.168.x.x:3000` in `.env.local` so pair commands show the correct address.
+Set `VI_PUBLIC_URL=http://192.168.x.x:3000` in `.env.local` so pair commands show the correct address.
 
 ### Dashboard environment variables
 
 | Variable | Mode | Description |
 |----------|------|-------------|
-| `PI_PUBLIC_URL` | Local | LAN URL used in pair commands, e.g. `http://192.168.1.83:3000` |
-| `PI_ACCESS_TOKEN` | Both | If set, all dashboard pages require this token |
-| `PI_RELAY_BASE_URL` | Cloud | Relay HTTP URL. Activates cloud mode when set with `PI_RELAY_PI_TOKEN` |
-| `PI_RELAY_PI_TOKEN` | Cloud | Bearer token for dashboard → relay `/v1/pi/*` calls |
-| `PI_RELAY_DAEMON_TOKEN` | Cloud | Daemon token embedded in generated pair commands |
-| `PI_RELAY_PUBLIC_WS_URL` | Cloud | Public WS URL baked into enrollment pair commands |
-| `PI_CLAUDE_DEFAULT_MODEL` | Both | Default model for new Claude sessions, e.g. `claude-sonnet-4-6` |
+| `VI_PUBLIC_URL` | Local | LAN URL used in pair commands, e.g. `http://192.168.1.83:3000` |
+| `VI_ACCESS_TOKEN` | Both | If set, all dashboard pages require this token |
+| `VI_RELAY_BASE_URL` | Cloud | Relay HTTP URL. Activates cloud mode when set with `VI_RELAY_VI_TOKEN` |
+| `VI_RELAY_VI_TOKEN` | Cloud | Bearer token for dashboard → relay `/v1/pi/*` calls |
+| `VI_RELAY_DAEMON_TOKEN` | Cloud | Daemon token embedded in generated pair commands |
+| `VI_RELAY_PUBLIC_WS_URL` | Cloud | Public WS URL baked into enrollment pair commands |
+| `VI_CLAUDE_DEFAULT_MODEL` | Both | Default model for new Claude sessions, e.g. `claude-sonnet-4-6` |
 | `DIRECT_TERMINAL_PORT` | Both | Override terminal WS port (default `14801`) |
 
 ---
@@ -289,12 +289,12 @@ See [packages/relay/README.md](packages/relay/README.md) and [docs/cloud-control
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `PI_RELAY_TOKENS` | Yes | `token:kind:label,...` — auth tokens. `kind` is `daemon` or `pi` |
-| `PI_RELAY_OWNER_TOKEN` | Yes | Bootstrap token for default owner row (set to same value as PI_TOKEN) |
-| `PI_RELAY_PUBLIC_WS_URL` | Yes | Public WebSocket URL baked into enrollment pair commands |
-| `PI_RELAY_DB_PATH` | Optional | SQLite path (default `./pi-relay.db`; use `/data/pi-relay.db` on Fly) |
-| `PI_RELAY_PORT` | Optional | HTTP listen port (default `8787`) |
-| `PI_RELAY_HOST` | Optional | Bind host (default `0.0.0.0`) |
+| `VI_RELAY_TOKENS` | Yes | `token:kind:label,...` — auth tokens. `kind` is `daemon` or `pi` |
+| `VI_RELAY_OWNER_TOKEN` | Yes | Bootstrap token for default owner row (set to same value as VI_TOKEN) |
+| `VI_RELAY_PUBLIC_WS_URL` | Yes | Public WebSocket URL baked into enrollment pair commands |
+| `VI_RELAY_DB_PATH` | Optional | SQLite path (default `./vi-relay.db`; use `/data/vi-relay.db` on Fly) |
+| `VI_RELAY_PORT` | Optional | HTTP listen port (default `8787`) |
+| `VI_RELAY_HOST` | Optional | Bind host (default `0.0.0.0`) |
 
 ---
 
@@ -303,16 +303,16 @@ See [packages/relay/README.md](packages/relay/README.md) and [docs/cloud-control
 ### Add a machine
 1. Dashboard → Machines → Add machine
 2. Copy the pair command
-3. Run on target machine: `pi-agent pair --server <url> --code <code> --start`
+3. Run on target machine: `vi-agent pair --server <url> --code <code> --start`
 
 ### Reconnect a machine
 1. Dashboard → Machines → select machine → Reconnect
 2. Copy new pair command, run on target machine
 
-### Restart the pi-agent daemon
+### Restart the vi-agent daemon
 ```bash
-pi-agent stop-daemon --state-file ~/.config/pi-agent/<state>.json
-pi-agent start-daemon --state-file ~/.config/pi-agent/<state>.json --tool claude
+vi-agent stop-daemon --state-file ~/.config/vi-agent/<state>.json
+vi-agent start-daemon --state-file ~/.config/vi-agent/<state>.json --tool claude
 ```
 
 ### Start a Claude session
@@ -326,10 +326,10 @@ Session detail → kebab menu (⋯) → Archive / Delete
 
 ### Rotate relay tokens
 See [Token rotation](docs/cloud-control-plane.md#token-rotation) in cloud-control-plane.md.
-After rotation, re-pair all pi-agents — their stored daemon token is now invalid.
+After rotation, re-pair all vi-agents — their stored daemon token is now invalid.
 
 ### Switch local ↔ cloud mode
-- **Activate cloud mode:** set `PI_RELAY_BASE_URL` + `PI_RELAY_PI_TOKEN` in `.env.local`, restart dashboard
+- **Activate cloud mode:** set `VI_RELAY_BASE_URL` + `VI_RELAY_VI_TOKEN` in `.env.local`, restart dashboard
 - **Return to local mode:** remove or comment out those two vars, restart dashboard
 
 ---
@@ -337,28 +337,28 @@ After rotation, re-pair all pi-agents — their stored daemon token is now inval
 ## Troubleshooting
 
 **Dashboard shows 0 machines but API has agents**  
-Check `PI_RELAY_BASE_URL` and `PI_RELAY_PI_TOKEN` in `.env.local`. The sidebar shows **Cloud · connected** when cloud mode is active. If it shows **auth failed**, the PI token is wrong or the relay hasn't restarted yet after a secrets change.
+Check `VI_RELAY_BASE_URL` and `VI_RELAY_VI_TOKEN` in `.env.local`. The sidebar shows **Cloud · connected** when cloud mode is active. If it shows **auth failed**, the PI token is wrong or the relay hasn't restarted yet after a secrets change.
 
 **Pair command points to wrong URL**  
-Local mode: set `PI_PUBLIC_URL=http://<your-lan-ip>:3000` in `.env.local`.  
-Cloud mode: confirm `PI_RELAY_PUBLIC_WS_URL` is set in Fly secrets (`fly secrets list --app <app>`).
+Local mode: set `VI_PUBLIC_URL=http://<your-lan-ip>:3000` in `.env.local`.  
+Cloud mode: confirm `VI_RELAY_PUBLIC_WS_URL` is set in Fly secrets (`fly secrets list --app <app>`).
 
-**pi-agent says "Unknown enrollment code"**  
+**vi-agent says "Unknown enrollment code"**  
 Enrollment codes expire (default 60 minutes) and are single-use. Generate a new one in the dashboard.
 
 **Terminal stuck on "Connecting…"**  
 - Local mode: confirm port 14801 is accessible and the DirectTerminal WS server is running.
-- Cloud mode: confirm pi-agent logged `terminal_relay_connected`. Check relay logs: `fly logs --app <app>`.
+- Cloud mode: confirm vi-agent logged `terminal_relay_connected`. Check relay logs: `fly logs --app <app>`.
 - WSL2: confirm the port proxy covers port 14801.
 
 **Browser terminal has no output**  
-Check the tmux session exists: `tmux list-sessions`. If the job exited, check `~/.config/pi-agent/jobs/<jobId>.log`.
+Check the tmux session exists: `tmux list-sessions`. If the job exited, check `~/.config/vi-agent/jobs/<jobId>.log`.
 
 **Text selection / copy does not work in terminal**  
 Do not enable `tmux set-option mouse on` for PI sessions. With mouse on, drag events route to the PTY and selection disappears on mouseup. PI sets `mouse off` by default — do not override it.
 
 **Claude model "deployment not found"**  
-Set `PI_CLAUDE_DEFAULT_MODEL=claude-sonnet-4-6` in `.env.local`. Do not use shell aliases — pi-agent launches Claude via subprocess and aliases are never expanded.
+Set `VI_CLAUDE_DEFAULT_MODEL=claude-sonnet-4-6` in `.env.local`. Do not use shell aliases — vi-agent launches Claude via subprocess and aliases are never expanded.
 
 **WSL2 dashboard not accessible from iPad or other LAN devices**  
 1. Confirm `npm run dev` starts Next.js with `-H 0.0.0.0`.
@@ -366,12 +366,12 @@ Set `PI_CLAUDE_DEFAULT_MODEL=claude-sonnet-4-6` in `.env.local`. Do not use shel
 3. Check Windows Firewall allows inbound on those ports.
 
 **Fly `/presence` returns 401 after token rotation**  
-Update `PI_RELAY_PI_TOKEN` in `.env.local` and restart the dashboard. Also re-pair all pi-agents.
+Update `VI_RELAY_VI_TOKEN` in `.env.local` and restart the dashboard. Also re-pair all vi-agents.
 
 **SQLite DB lost after Fly deploy**  
 Create a persistent volume before the first deploy — the Fly filesystem is ephemeral:
 ```bash
-fly volumes create pi_relay_data --size 1 --region sin --app <app>
+fly volumes create vi_relay_data --size 1 --region sin --app <app>
 ```
 Confirm: `fly volumes list --app <app>`.
 
@@ -379,7 +379,7 @@ Confirm: `fly volumes list --app <app>`.
 
 ## Security Notes
 
-- **Phase 1 uses token auth, not user accounts.** `PI_ACCESS_TOKEN` is a single shared secret. Fine for personal use; not suitable for multi-user deployments.
+- **Phase 1 uses token auth, not user accounts.** `VI_ACCESS_TOKEN` is a single shared secret. Fine for personal use; not suitable for multi-user deployments.
 - **No E2EE yet.** The relay can see plaintext terminal frames and session payloads. E2EE is planned for Phase 4.
 - **Treat tokens as secrets.** Never commit `.env.local`. Never paste tokens in chat, logs, or code review. If a token is exposed, rotate immediately — see [Token rotation](docs/cloud-control-plane.md#token-rotation).
 - **Enrollment codes are one-time and expire.** After a code is consumed or expires, it cannot be reused.
@@ -400,7 +400,7 @@ Confirm: `fly volumes list --app <app>`.
 - Session lifecycle dropdown (resume, archive, delete)
 
 ### Phase 3 — Accounts (planned)
-- Replace single `PI_ACCESS_TOKEN` with invite-based or OAuth login
+- Replace single `VI_ACCESS_TOKEN` with invite-based or OAuth login
 
 ### Phase 4 — E2EE (planned)
 - End-to-end encrypted terminal frames and session payloads
@@ -413,7 +413,7 @@ Confirm: `fly volumes list --app <app>`.
 ```
 Project_Interface/
 ├── bridges/
-│   └── pi-agent/          Python daemon — runs on agent machines
+│   └── vi-agent/          Python daemon — runs on agent machines
 ├── docs/
 │   ├── HANDOFF.md          Full developer handoff + architecture details
 │   └── cloud-control-plane.md  Cloud relay setup and token rotation runbook

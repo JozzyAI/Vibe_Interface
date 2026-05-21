@@ -23,7 +23,7 @@ let _db: Db | null = null;
 
 export function getDb(): Db {
   if (_db) return _db;
-  const dbPath = (process.env["PI_RELAY_DB_PATH"] ?? "./pi-relay.db").trim();
+  const dbPath = (process.env["VI_RELAY_DB_PATH"] ?? "./vi-relay.db").trim();
   _db = new BetterSqlite3(dbPath);
   _db.pragma("journal_mode = WAL");
   _db.pragma("foreign_keys = ON");
@@ -172,15 +172,15 @@ export function initSchema(db: Db): void {
   `);
 }
 
-/** Bootstrap the default owner row if PI_RELAY_OWNER_TOKEN is configured. */
+/** Bootstrap the default owner row if VI_RELAY_OWNER_TOKEN is configured. */
 export function bootstrapOwner(db: Db): void {
-  const ownerToken = process.env["PI_RELAY_OWNER_TOKEN"]?.trim();
+  const ownerToken = process.env["VI_RELAY_OWNER_TOKEN"]?.trim();
   if (!ownerToken) return;
   const existing = db.prepare("SELECT owner_id FROM owners WHERE owner_id = 'default'").get();
   if (!existing) {
     db.prepare(
       "INSERT INTO owners (owner_id, name, token, created_at) VALUES ('default', 'owner', ?, ?)",
     ).run(ownerToken, new Date().toISOString());
-    console.log("[DB] Default owner bootstrapped from PI_RELAY_OWNER_TOKEN");
+    console.log("[DB] Default owner bootstrapped from VI_RELAY_OWNER_TOKEN");
   }
 }

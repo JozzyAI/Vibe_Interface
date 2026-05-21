@@ -1,5 +1,5 @@
 import { type NextRequest } from "next/server";
-import { deletePISession } from "@pi/core";
+import { deleteVISession } from "@vi/core";
 import { getCorrelationId, jsonWithCorrelation } from "@/lib/observability";
 import { validateIdentifier } from "@/lib/validation";
 
@@ -13,7 +13,7 @@ export async function POST(
     const idErr = validateIdentifier(id, "id");
     if (idErr) return jsonWithCorrelation({ error: idErr }, { status: 400 }, correlationId);
 
-    await deletePISession(id);
+    await deleteVISession(id);
     return jsonWithCorrelation({ ok: true }, { status: 200 }, correlationId);
   } catch (error) {
     return jsonWithCorrelation(

@@ -109,11 +109,11 @@ export function createRelayServer(): RelayServer {
     }
 
     // ── Daemon routes (/v1/daemon/*) ───────────────────────────────────────
-    // Called by pi-agent. Auth: daemon token.
+    // Called by vi-agent. Auth: daemon token.
     if (pathname.startsWith("/v1/daemon/") || pathname.startsWith("/api/remote-agents/enrollments/consume")) {
       const token = extractBearerToken(req.headers.authorization);
 
-      // /api/remote-agents/enrollments/consume is consumed by pi-agent pair command
+      // /api/remote-agents/enrollments/consume is consumed by vi-agent pair command
       // without any auth token (it uses the enrollment code as auth).
       const isConsumeAlias =
         pathname === "/api/remote-agents/enrollments/consume" && req.method === "POST";
@@ -235,7 +235,7 @@ export function createRelayServer(): RelayServer {
           return;
         }
 
-        // enrollment consume (daemon path — called during pi-agent pairing)
+        // enrollment consume (daemon path — called during vi-agent pairing)
         if ((pathname === "/v1/daemon/enrollments/consume" || isConsumeAlias) && req.method === "POST") {
           const body = await readJsonBody(req) as Record<string, unknown>;
           const result = store.consumeEnrollment(String(body["code"] ?? ""));
@@ -434,7 +434,7 @@ export function createRelayServer(): RelayServer {
   // ── WebSocket: general relay (/ws) ─────────────────────────────────────────
   const wss = new WebSocketServer({ noServer: true });
 
-  // ── WebSocket: terminal relay (/pi-agent-relay) ────────────────────────────
+  // ── WebSocket: terminal relay (/vi-agent-relay) ────────────────────────────
   const terminalWss = new WebSocketServer({ noServer: true });
   const terminalAgents = new Map<string, WebSocket>();
   let terminalDashboard: WebSocket | null = null;
@@ -597,7 +597,7 @@ export function createRelayServer(): RelayServer {
     const pathname = new URL(request.url ?? "/", "ws://localhost").pathname;
     if (pathname === "/ws") {
       wss.handleUpgrade(request, socket, head, (ws: WebSocket) => wss.emit("connection", ws, request));
-    } else if (pathname === "/pi-agent-relay") {
+    } else if (pathname === "/vi-agent-relay") {
       terminalWss.handleUpgrade(request, socket, head, (ws: WebSocket) => terminalWss.emit("connection", ws, request));
     } else {
       socket.destroy();

@@ -2,7 +2,7 @@
  * relay-cloud-client.ts
  *
  * Dashboard HTTP client for PI Cloud relay /v1/pi/* routes.
- * Activated when PI_RELAY_BASE_URL + PI_RELAY_PI_TOKEN are set.
+ * Activated when VI_RELAY_BASE_URL + VI_RELAY_VI_TOKEN are set.
  * Returns the same TypeScript shapes as remote-agents.ts so all API routes
  * and UI components work without changes.
  */
@@ -15,18 +15,18 @@ import type {
 } from "@/lib/types";
 
 function relayBase(): string {
-  return (process.env["PI_RELAY_BASE_URL"] ?? "").trim().replace(/\/$/, "").replace(/\/ws$/, "");
+  return (process.env["VI_RELAY_BASE_URL"] ?? "").trim().replace(/\/$/, "").replace(/\/ws$/, "");
 }
 
-function piToken(): string {
-  return process.env["PI_RELAY_PI_TOKEN"] ?? "";
+function viToken(): string {
+  return process.env["VI_RELAY_VI_TOKEN"] ?? "";
 }
 
 async function piPost<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${relayBase()}${path}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${piToken()}`,
+      Authorization: `Bearer ${viToken()}`,
       "Content-Type": "application/json",
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -39,7 +39,7 @@ async function piPost<T>(path: string, body?: unknown): Promise<T> {
 
 async function piGet<T>(path: string): Promise<T> {
   const res = await fetch(`${relayBase()}${path}`, {
-    headers: { Authorization: `Bearer ${piToken()}` },
+    headers: { Authorization: `Bearer ${viToken()}` },
     cache: "no-store",
   });
   const json = await res.json() as { error?: string } & T;
@@ -47,11 +47,11 @@ async function piGet<T>(path: string): Promise<T> {
   return json;
 }
 
-async function piPatch<T>(path: string, body?: unknown): Promise<T> {
+async function viPatch<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${relayBase()}${path}`, {
     method: "PATCH",
     headers: {
-      Authorization: `Bearer ${piToken()}`,
+      Authorization: `Bearer ${viToken()}`,
       "Content-Type": "application/json",
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -70,7 +70,7 @@ export async function getRemoteApprovalOverview(): Promise<RemoteApprovalOvervie
 
 // ── Agents (dashboard-side operations only) ───────────────────────────────────
 // NOTE: registerRemoteAgent, heartbeatRemoteAgent, pollRemoteAgent, reportRemoteAgentJob
-// are daemon routes — pi-agent calls the relay directly in cloud mode.
+// are daemon routes — vi-agent calls the relay directly in cloud mode.
 // The dashboard never mediates those calls. They are NOT exported from relay-cloud-client.
 
 // ── Enrollments ───────────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ export async function consumeRemoteEnrollment(input: { code: string }): Promise<
   };
 }> {
   // Use the relay's no-auth alias so backward-compat pairing still works when
-  // dashboard is in cloud mode (pi-agent pair --server http://dashboard).
+  // dashboard is in cloud mode (vi-agent pair --server http://dashboard).
   const res = await fetch(`${relayBase()}/api/remote-agents/enrollments/consume`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -165,7 +165,7 @@ export async function updateRemoteAgentJobSettings(input: {
   reasoningEffort?: string | null;
 }): Promise<RemoteAgentJob> {
   const { jobId, ...rest } = input;
-  const result = await piPatch<{ job: RemoteAgentJob }>(`/v1/pi/jobs/${encodeURIComponent(jobId)}`, rest);
+  const result = await viPatch<{ job: RemoteAgentJob }>(`/v1/pi/jobs/${encodeURIComponent(jobId)}`, rest);
   return result.job;
 }
 

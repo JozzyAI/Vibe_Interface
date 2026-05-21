@@ -1,12 +1,12 @@
 import "server-only";
 
 import {
-  listPIGitHubConnectors,
-  upsertPIGitHubConnector,
+  listVIGitHubConnectors,
+  upsertVIGitHubConnector,
   type CreateIssueInput,
-  type PIGitHubConnectorRecord,
-} from "@pi/core";
-import type { PIConfig, PIProjectConfig } from "@/lib/services";
+  type VIGitHubConnectorRecord,
+} from "@vi/core";
+import type { PIConfig, VIProjectConfig } from "@/lib/services";
 
 // PI-owned definitions for GitHub issue types
 export interface Issue {
@@ -35,12 +35,12 @@ export interface IssueUpdate {
 }
 
 // In PI, all projects use GitHub connectors — tracker/scm plugin not needed
-function isGitHubProject(_project: PIProjectConfig): boolean {
+function isGitHubProject(_project: VIProjectConfig): boolean {
   return true;
 }
 
 
-function getConnectorRepo(project: PIProjectConfig, connector: PIGitHubConnectorRecord) {
+function getConnectorRepo(project: VIProjectConfig, connector: VIGitHubConnectorRecord) {
   const owner = connector.owner.trim();
   const repo = connector.repo.trim();
   if (!owner) {
@@ -51,16 +51,16 @@ function getConnectorRepo(project: PIProjectConfig, connector: PIGitHubConnector
 
 async function getSelectedConnector(
   config: PIConfig,
-  project: PIProjectConfig,
-): Promise<PIGitHubConnectorRecord | null> {
+  project: VIProjectConfig,
+): Promise<VIGitHubConnectorRecord | null> {
   if (!config.configPath || !isGitHubProject(project)) return null;
-  const store = await listPIGitHubConnectors(config.configPath, project.path);
+  const store = await listVIGitHubConnectors(config.configPath, project.path);
   if (!store.selectedConnectorId) return null;
   return store.connectors.find((connector) => connector.id === store.selectedConnectorId) ?? null;
 }
 
 async function githubRequest<T>(
-  connector: PIGitHubConnectorRecord,
+  connector: VIGitHubConnectorRecord,
   path: string,
   init?: RequestInit,
 ): Promise<T> {
@@ -122,7 +122,7 @@ function mapGitHubIssue(
 export async function getSelectedGitHubConnectorForProject(
   config: PIConfig,
   projectId: string,
-): Promise<PIGitHubConnectorRecord | null> {
+): Promise<VIGitHubConnectorRecord | null> {
   const project = config.projects[projectId];
   if (!project) return null;
   return getSelectedConnector(config, project);
@@ -319,7 +319,7 @@ export async function createRepositoryViaGitHubConnector(
     body: JSON.stringify(payload),
   });
 
-  await upsertPIGitHubConnector(config.configPath, project.path, {
+  await upsertVIGitHubConnector(config.configPath, project.path, {
     id: connector.id,
     label: connector.label,
     host: connector.host,

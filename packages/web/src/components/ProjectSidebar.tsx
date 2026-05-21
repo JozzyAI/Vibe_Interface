@@ -189,7 +189,7 @@ function ProjectSidebarInner({
               pathname === "/approval-hub" && "project-sidebar__sess-row--active",
             )}
             aria-current={pathname === "/approval-hub" ? "page" : undefined}
-            aria-label="Open PI approvals"
+            aria-label="Open VI approvals"
           >
             <SessionDot level="respond" />
             <span

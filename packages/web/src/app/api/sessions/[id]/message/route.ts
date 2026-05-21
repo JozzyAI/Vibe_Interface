@@ -1,5 +1,5 @@
 import { type NextRequest } from "next/server";
-import { getPISession } from "@pi/core";
+import { getVISession } from "@vi/core";
 import { getServices } from "@/lib/services";
 import { validateIdentifier, validateString, stripControlChars } from "@/lib/validation";
 import { getCorrelationId, jsonWithCorrelation } from "@/lib/observability";
@@ -20,7 +20,7 @@ export async function POST(
     const msgErr = validateString(body?.message, "message", MAX_MESSAGE_LENGTH);
     if (msgErr) return jsonWithCorrelation({ error: msgErr }, { status: 400 }, correlationId);
 
-    const session = await getPISession(id);
+    const session = await getVISession(id);
     if (!session) return jsonWithCorrelation({ error: "Session not found" }, { status: 404 }, correlationId);
 
     const { sessionManager } = await getServices();

@@ -4,10 +4,10 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import type {
-  PIApprovalEventType,
-  PIApprovalPrimaryAction,
-  PIApprovalPermissionMode,
-  PIApprovalRiskLevel,
+  VIApprovalEventType,
+  VIApprovalPrimaryAction,
+  VIApprovalPermissionMode,
+  VIApprovalRiskLevel,
   PIExternalActionKind,
   RemoteAgentConnectionState,
   RemoteAuthConnectorSummary,
@@ -36,7 +36,7 @@ interface RemoteAgentRecord {
   stateFile?: string;
   logFile?: string;
   status: RemoteAgentStatus;
-  permissionMode: PIApprovalPermissionMode;
+  permissionMode: VIApprovalPermissionMode;
   timeoutSeconds: number;
   connectionState: RemoteAgentConnectionState;
   consecutiveFailures: number;
@@ -264,7 +264,7 @@ function collectJobTree(store: RemoteAgentStore, rootJobId: string): Set<string>
   return ids;
 }
 
-function cycleMode(mode: PIApprovalPermissionMode): PIApprovalPermissionMode {
+function cycleMode(mode: VIApprovalPermissionMode): VIApprovalPermissionMode {
   if (mode === "manual") return "timeout_allow";
   if (mode === "timeout_allow") return "always_allow";
   return "manual";
@@ -389,7 +389,7 @@ function findResumeCandidate(
   const sessions = agent?.sessionHistory ?? [];
   if (sessions.length === 0) return undefined;
 
-  const storedSessionId = job.codexSessionId ?? job.env?.PI_CODEX_SESSION_ID;
+  const storedSessionId = job.codexSessionId ?? job.env?.VI_CODEX_SESSION_ID;
   if (storedSessionId) {
     const exact = sessions.find((session) => session.sessionId === storedSessionId);
     if (exact) return exact;
@@ -430,7 +430,7 @@ function buildCodexResumeCommand(
   options: { model?: string | null; reasoningEffort?: string | null } = {},
 ): string[] {
   return [
-    "pi-agent",
+    "vi-agent",
     "codex",
     "--cwd",
     cwd,
@@ -446,7 +446,7 @@ function buildCodexFreshCommand(
   options: { model?: string | null; reasoningEffort?: string | null } = {},
 ): string[] {
   return [
-    "pi-agent",
+    "vi-agent",
     "codex",
     "--cwd",
     cwd,
@@ -456,7 +456,7 @@ function buildCodexFreshCommand(
 }
 
 function ralphTaskSeed(job: RemoteAgentJob): string {
-  const envTitle = job.env?.PI_SESSION_TITLE?.trim();
+  const envTitle = job.env?.VI_SESSION_TITLE?.trim();
   if (envTitle) return envTitle;
   return job.title.replace(/\s+\(ralph iteration \d+\)$/i, "").trim() || "PI task";
 }
@@ -520,14 +520,14 @@ function buildRalphIterationCommand(
     // Fallback: legacy agent.toolType for very old records without a command
     const toolType = agent?.toolType.toLowerCase() ?? "";
     if (toolType.includes("claude")) {
-      return ["pi-agent", "claude", "--cwd", cwd, "--", prompt];
+      return ["vi-agent", "claude", "--cwd", cwd, "--", prompt];
     }
   }
   if (isClaudeJob) {
-    return ["pi-agent", "claude", "--cwd", cwd, "--", prompt];
+    return ["vi-agent", "claude", "--cwd", cwd, "--", prompt];
   }
   return [
-    "pi-agent",
+    "vi-agent",
     "codex",
     "--cwd",
     cwd,
@@ -575,14 +575,14 @@ function maybeQueueRalphIteration(store: RemoteAgentStore, job: RemoteAgentJob):
     cwd,
     env: {
       ...(job.env ?? {}),
-      PI_RALPH_ENABLED: "1",
-      PI_RALPH_MODE: "iteration",
-      PI_RALPH_PARENT_JOB_ID: job.jobId,
-      PI_RALPH_ITERATION: String(nextIteration),
-      PI_AUTO_RESUME_USAGE_LIMIT: job.autoResumeUsageLimit ? "1" : "0",
-      PI_AUTO_RESTART_CODEX: job.autoRestartCodex ? "1" : "0",
-      PI_CODEX_MODEL: job.model ?? "",
-      PI_CODEX_REASONING_EFFORT: job.reasoningEffort ?? "",
+      VI_RALPH_ENABLED: "1",
+      VI_RALPH_MODE: "iteration",
+      VI_RALPH_PARENT_JOB_ID: job.jobId,
+      VI_RALPH_ITERATION: String(nextIteration),
+      VI_AUTO_RESUME_USAGE_LIMIT: job.autoResumeUsageLimit ? "1" : "0",
+      VI_AUTO_RESTART_CODEX: job.autoRestartCodex ? "1" : "0",
+      VI_CODEX_MODEL: job.model ?? "",
+      VI_CODEX_REASONING_EFFORT: job.reasoningEffort ?? "",
     },
     status: "queued",
     createdAt: now,
@@ -646,14 +646,14 @@ function maybeQueueCodexRestartResume(store: RemoteAgentStore, job: RemoteAgentJ
     cwd,
     env: {
       ...(job.env ?? {}),
-      PI_RALPH_ENABLED: job.ralphEnabled ? "1" : "0",
-      PI_RALPH_MODE: job.ralphEnabled ? "iteration" : "off",
-      PI_AUTO_RESUME_USAGE_LIMIT: job.autoResumeUsageLimit ? "1" : "0",
-      PI_AUTO_RESTART_CODEX: "1",
-      PI_CODEX_SESSION_ID: candidate.sessionId,
-      PI_AUTO_RESTART_PARENT_JOB_ID: job.jobId,
-      PI_CODEX_MODEL: job.model ?? "",
-      PI_CODEX_REASONING_EFFORT: job.reasoningEffort ?? "",
+      VI_RALPH_ENABLED: job.ralphEnabled ? "1" : "0",
+      VI_RALPH_MODE: job.ralphEnabled ? "iteration" : "off",
+      VI_AUTO_RESUME_USAGE_LIMIT: job.autoResumeUsageLimit ? "1" : "0",
+      VI_AUTO_RESTART_CODEX: "1",
+      VI_CODEX_SESSION_ID: candidate.sessionId,
+      VI_AUTO_RESTART_PARENT_JOB_ID: job.jobId,
+      VI_CODEX_MODEL: job.model ?? "",
+      VI_CODEX_REASONING_EFFORT: job.reasoningEffort ?? "",
     },
     status: "queued",
     createdAt: now,
@@ -744,12 +744,12 @@ function maybeQueueUsageLimitResume(store: RemoteAgentStore, job: RemoteAgentJob
     cwd: job.cwd,
     env: {
       ...(job.env ?? {}),
-      PI_RALPH_ENABLED: job.ralphEnabled ? "1" : "0",
-      PI_RALPH_MODE: job.ralphEnabled ? "iteration" : "off",
-      PI_AUTO_RESUME_USAGE_LIMIT: "1",
-      PI_AUTO_RESUME_PARENT_JOB_ID: job.jobId,
-      PI_CODEX_MODEL: job.model ?? "",
-      PI_CODEX_REASONING_EFFORT: job.reasoningEffort ?? "",
+      VI_RALPH_ENABLED: job.ralphEnabled ? "1" : "0",
+      VI_RALPH_MODE: job.ralphEnabled ? "iteration" : "off",
+      VI_AUTO_RESUME_USAGE_LIMIT: "1",
+      VI_AUTO_RESUME_PARENT_JOB_ID: job.jobId,
+      VI_CODEX_MODEL: job.model ?? "",
+      VI_CODEX_REASONING_EFFORT: job.reasoningEffort ?? "",
     },
     status: "queued",
     createdAt: now,
@@ -1129,7 +1129,7 @@ export async function removeRemoteAgent(input: {
 
 /**
  * Create a fresh enrollment for an existing (or forgotten) agent identity so it can re-pair.
- * Uses PI_PUBLIC_URL for the server address shown in the pair command.
+ * Uses VI_PUBLIC_URL for the server address shown in the pair command.
  */
 export async function createReconnectEnrollment(agentId: string): Promise<{
   enrollment: RemoteEnrollmentSummary;
@@ -1148,22 +1148,22 @@ export async function createReconnectEnrollment(agentId: string): Promise<{
     expiresInMinutes: 60,
   });
 
-  const serverOrigin = (process.env.PI_PUBLIC_URL ?? "").trim().replace(/\/$/, "") || "http://localhost:3000";
+  const serverOrigin = (process.env.VI_PUBLIC_URL ?? "").trim().replace(/\/$/, "") || "http://localhost:3000";
   // Derive the terminal relay WebSocket URL from the public server origin.
-  // http://host:port → ws://host:14801/pi-agent-relay (local dev)
-  // https://host    → wss://host/pi-agent-relay (production)
+  // http://host:port → ws://host:14801/vi-agent-relay (local dev)
+  // https://host    → wss://host/vi-agent-relay (production)
   let relayUrl: string;
   if (serverOrigin.startsWith("https://")) {
     const host = serverOrigin.slice("https://".length).split("/")[0];
-    relayUrl = `wss://${host}/pi-agent-relay`;
+    relayUrl = `wss://${host}/vi-agent-relay`;
   } else {
     const host = serverOrigin.replace(/^https?:\/\//, "").split(":")[0];
     const directPort = process.env.DIRECT_TERMINAL_PORT ?? "14801";
-    relayUrl = `ws://${host}:${directPort}/pi-agent-relay`;
+    relayUrl = `ws://${host}:${directPort}/vi-agent-relay`;
   }
 
-  const pairCommand = `pi-agent pair --server ${serverOrigin} --code ${enrollment.code} --start`;
-  const advancedCommand = `PI_TERMINAL_RELAY_URL=${relayUrl} \\\n  pi-agent pair --server ${serverOrigin} --code ${enrollment.code} --start`;
+  const pairCommand = `vi-agent pair --server ${serverOrigin} --code ${enrollment.code} --start`;
+  const advancedCommand = `VI_TERMINAL_RELAY_URL=${relayUrl} \\\n  vi-agent pair --server ${serverOrigin} --code ${enrollment.code} --start`;
   return { enrollment, pairCommand, advancedCommand, relayUrl };
 }
 
@@ -1192,10 +1192,10 @@ function normalizeRelayPublicUrl(raw: string | undefined): string | undefined {
 }
 
 function relayDaemonToken(): string | undefined {
-  const explicit = process.env.PI_RELAY_DAEMON_TOKEN?.trim();
+  const explicit = process.env.VI_RELAY_DAEMON_TOKEN?.trim();
   if (explicit) return explicit;
 
-  const source = process.env.PI_RELAY_TOKENS?.trim();
+  const source = process.env.VI_RELAY_TOKENS?.trim();
   if (!source) return undefined;
 
   for (const entry of source.split(",")) {
@@ -1239,9 +1239,9 @@ export async function createRemoteEnrollment(input: {
     createdAt,
     expiresAt,
     relayUrl: normalizeRelayPublicUrl(
-      process.env.PI_RELAY_PUBLIC_WS_URL ??
-        process.env.PI_RELAY_URL ??
-        process.env.PI_RELAY_BASE_URL,
+      process.env.VI_RELAY_PUBLIC_WS_URL ??
+        process.env.VI_RELAY_URL ??
+        process.env.VI_RELAY_BASE_URL,
     ),
     relayToken: relayDaemonToken(),
   };
@@ -1338,13 +1338,13 @@ export async function createRemoteApprovalRequest(input: {
   parentJobId?: string;
   title: string;
   message: string;
-  riskLevel?: PIApprovalRiskLevel;
+  riskLevel?: VIApprovalRiskLevel;
   command?: string;
   actionKind?: PIExternalActionKind;
   suggestedCommand?: string;
   helperPrompt?: string;
-  eventType?: PIApprovalEventType;
-  primaryAction?: PIApprovalPrimaryAction;
+  eventType?: VIApprovalEventType;
+  primaryAction?: VIApprovalPrimaryAction;
 }): Promise<RemoteApprovalRequestRecord> {
   const store = await readStore();
   const agent = store.agents.find((entry) => entry.agentId === input.agentId);
@@ -1414,7 +1414,7 @@ export async function createRemoteApprovalRequest(input: {
 
 export async function setRemoteAgentPolicy(input: {
   agentId: string;
-  mode?: PIApprovalPermissionMode;
+  mode?: VIApprovalPermissionMode;
   cycle?: boolean;
   timeoutSeconds?: number;
 }): Promise<RemoteAgentRecord> {
@@ -1518,7 +1518,7 @@ function queueApprovedExternalAction(
   if (!agent) return undefined;
 
   const alreadyQueued = store.jobs.find(
-    (job) => job.env?.PI_EXTERNAL_ACTION_REQUEST_ID === request.requestId,
+    (job) => job.env?.VI_EXTERNAL_ACTION_REQUEST_ID === request.requestId,
   );
   if (alreadyQueued) {
     if (!alreadyQueued.parentJobId && request.parentJobId) {
@@ -1543,9 +1543,9 @@ function queueApprovedExternalAction(
     command,
     cwd: cwd ?? null,
     env: {
-      PI_EXTERNAL_ACTION_REQUEST_ID: request.requestId,
-      PI_EXTERNAL_ACTION_KIND: request.actionKind ?? "other",
-      PI_REMOTE_INTERACTIVE: "1",
+      VI_EXTERNAL_ACTION_REQUEST_ID: request.requestId,
+      VI_EXTERNAL_ACTION_KIND: request.actionKind ?? "other",
+      VI_REMOTE_INTERACTIVE: "1",
     },
     status: "queued",
     createdAt: now,
@@ -1643,7 +1643,7 @@ export async function createRemoteAgentJob(input: {
     autoRestartCodex: input.autoRestartCodex ?? false,
     model: input.model?.trim() || undefined,
     reasoningEffort: input.reasoningEffort?.trim() || undefined,
-    codexSessionId: input.env?.PI_CODEX_SESSION_ID,
+    codexSessionId: input.env?.VI_CODEX_SESSION_ID,
   };
   store.jobs.unshift(job);
   agent.lastSeenAt = now;
@@ -1689,9 +1689,9 @@ export async function updateRemoteAgentJobSettings(input: {
       : undefined;
     job.env = {
       ...(job.env ?? {}),
-      PI_RALPH_ENABLED: input.ralphEnabled ? "1" : "0",
-      PI_RALPH_MODE: input.ralphEnabled ? "iteration" : "off",
-      PI_RALPH_ITERATION: input.ralphEnabled ? String(job.ralphIteration ?? 1) : "",
+      VI_RALPH_ENABLED: input.ralphEnabled ? "1" : "0",
+      VI_RALPH_MODE: input.ralphEnabled ? "iteration" : "off",
+      VI_RALPH_ITERATION: input.ralphEnabled ? String(job.ralphIteration ?? 1) : "",
     };
     if (!input.ralphEnabled) {
       job.pendingInputs = (job.pendingInputs ?? []).filter(
@@ -1704,14 +1704,14 @@ export async function updateRemoteAgentJobSettings(input: {
     job.autoResumeUsageLimit = input.autoResumeUsageLimit;
     job.env = {
       ...(job.env ?? {}),
-      PI_AUTO_RESUME_USAGE_LIMIT: input.autoResumeUsageLimit ? "1" : "0",
+      VI_AUTO_RESUME_USAGE_LIMIT: input.autoResumeUsageLimit ? "1" : "0",
     };
   }
   if (typeof input.autoRestartCodex === "boolean") {
     job.autoRestartCodex = input.autoRestartCodex;
     job.env = {
       ...(job.env ?? {}),
-      PI_AUTO_RESTART_CODEX: input.autoRestartCodex ? "1" : "0",
+      VI_AUTO_RESTART_CODEX: input.autoRestartCodex ? "1" : "0",
     };
   }
   if (input.model !== undefined) {
@@ -1719,7 +1719,7 @@ export async function updateRemoteAgentJobSettings(input: {
     job.model = model;
     job.env = {
       ...(job.env ?? {}),
-      PI_CODEX_MODEL: model ?? "",
+      VI_CODEX_MODEL: model ?? "",
     };
   }
   if (input.reasoningEffort !== undefined) {
@@ -1727,7 +1727,7 @@ export async function updateRemoteAgentJobSettings(input: {
     job.reasoningEffort = reasoningEffort;
     job.env = {
       ...(job.env ?? {}),
-      PI_CODEX_REASONING_EFFORT: reasoningEffort ?? "",
+      VI_CODEX_REASONING_EFFORT: reasoningEffort ?? "",
     };
   }
   job.updatedAt = new Date().toISOString();
@@ -1799,14 +1799,14 @@ export async function restartRemoteCodexJob(input: {
     cwd,
     env: {
       ...(job.env ?? {}),
-      PI_RALPH_ENABLED: job.ralphEnabled ? "1" : "0",
-      PI_RALPH_MODE: job.ralphEnabled ? "iteration" : "off",
-      PI_AUTO_RESUME_USAGE_LIMIT: job.autoResumeUsageLimit ? "1" : "0",
-      PI_AUTO_RESTART_CODEX: job.autoRestartCodex ? "1" : "0",
-      PI_CODEX_SESSION_ID: input.fresh ? "" : (candidate as RemoteAgentSessionHistoryItem).sessionId,
-      PI_RESTART_PARENT_JOB_ID: job.jobId,
-      PI_CODEX_MODEL: job.model ?? "",
-      PI_CODEX_REASONING_EFFORT: job.reasoningEffort ?? "",
+      VI_RALPH_ENABLED: job.ralphEnabled ? "1" : "0",
+      VI_RALPH_MODE: job.ralphEnabled ? "iteration" : "off",
+      VI_AUTO_RESUME_USAGE_LIMIT: job.autoResumeUsageLimit ? "1" : "0",
+      VI_AUTO_RESTART_CODEX: job.autoRestartCodex ? "1" : "0",
+      VI_CODEX_SESSION_ID: input.fresh ? "" : (candidate as RemoteAgentSessionHistoryItem).sessionId,
+      VI_RESTART_PARENT_JOB_ID: job.jobId,
+      VI_CODEX_MODEL: job.model ?? "",
+      VI_CODEX_REASONING_EFFORT: job.reasoningEffort ?? "",
     },
     status: "queued",
     createdAt: now,
@@ -1864,7 +1864,7 @@ function buildHandoffContinuationPrompt(job: RemoteAgentJob, sourceAgent: Remote
     "- First read the local workspace state and confirm what exists on this machine.",
     "- Continue from the next actionable item in TODO.md.",
     "- If the local machine is missing files, credentials, remotes, or dependencies, ask PI through the external-action hook instead of guessing.",
-    "- Keep PROGRESS.md, TODO.md, and NOTES.md updated through the PI_*_FILE environment variables.",
+    "- Keep PROGRESS.md, TODO.md, and NOTES.md updated through the VI_*_FILE environment variables.",
     "- When blocked or complete, update the handoff files before stopping.",
     "",
     "PROGRESS.md:",
@@ -1916,9 +1916,9 @@ export async function continueRemoteAgentJobOnMachine(input: {
   const provider = targetAgent.toolType.toLowerCase().includes("claude") ? "claude" : "codex";
   const command =
     provider === "claude"
-      ? ["pi-agent", "claude", "--cwd", cwd, "--", prompt]
+      ? ["vi-agent", "claude", "--cwd", cwd, "--", prompt]
       : [
-          "pi-agent",
+          "vi-agent",
           "codex",
           "--cwd",
           cwd,
@@ -1940,16 +1940,16 @@ export async function continueRemoteAgentJobOnMachine(input: {
     cwd,
     env: {
       ...(sourceJob.env ?? {}),
-      PI_SESSION_TITLE: title,
-      PI_SESSION_SOURCE: "handoff-continuation",
-      PI_HANDOFF_PARENT_JOB_ID: sourceJob.jobId,
-      PI_HANDOFF_SOURCE_AGENT_ID: sourceJob.agentId,
-      PI_RALPH_ENABLED: sourceJob.ralphEnabled ? "1" : "0",
-      PI_RALPH_MODE: sourceJob.ralphEnabled ? "iteration" : "off",
-      PI_AUTO_RESUME_USAGE_LIMIT: sourceJob.autoResumeUsageLimit ? "1" : "0",
-      PI_AUTO_RESTART_CODEX: sourceJob.autoRestartCodex ? "1" : "0",
-      PI_CODEX_MODEL: sourceJob.model ?? "",
-      PI_CODEX_REASONING_EFFORT: sourceJob.reasoningEffort ?? "",
+      VI_SESSION_TITLE: title,
+      VI_SESSION_SOURCE: "handoff-continuation",
+      VI_HANDOFF_PARENT_JOB_ID: sourceJob.jobId,
+      VI_HANDOFF_SOURCE_AGENT_ID: sourceJob.agentId,
+      VI_RALPH_ENABLED: sourceJob.ralphEnabled ? "1" : "0",
+      VI_RALPH_MODE: sourceJob.ralphEnabled ? "iteration" : "off",
+      VI_AUTO_RESUME_USAGE_LIMIT: sourceJob.autoResumeUsageLimit ? "1" : "0",
+      VI_AUTO_RESTART_CODEX: sourceJob.autoRestartCodex ? "1" : "0",
+      VI_CODEX_MODEL: sourceJob.model ?? "",
+      VI_CODEX_REASONING_EFFORT: sourceJob.reasoningEffort ?? "",
     },
     status: "queued",
     createdAt: now,

@@ -10,9 +10,9 @@ A standalone control plane for AI coding agents: idea intake, human-in-the-loop 
 
 ```
 packages/
-  core/     @pi/core    — types, paths, session store, control plane logic
-  relay/    @pi/relay   — WebSocket relay broker for remote agents
-  web/      @pi/web     — Next.js dashboard (pages, API routes, components)
+  core/     @vi/core    — types, paths, session store, control plane logic
+  relay/    @vi/relay   — WebSocket relay broker for remote agents
+  web/      @vi/web     — Next.js dashboard (pages, API routes, components)
 ```
 
 ---
@@ -22,29 +22,29 @@ packages/
 Pure TypeScript library with no runtime framework dependency.
 
 **`src/types.ts`** — all PI-owned types:
-- `PISession` — canonical session record
-- `PISessionStatus` — 16-value status enum (spawning → working → pr_open → merged → …)
-- `PIActivityState` — live agent activity (active / idle / waiting_input / blocked / exited)
-- `CIStatus`, `PIProjectConfig`, `PITracker`
-- `createMockPISessions()` — returns realistic demo sessions for first-run experience
+- `VISession` — canonical session record
+- `VISessionStatus` — 16-value status enum (spawning → working → pr_open → merged → …)
+- `VIActivityState` — live agent activity (active / idle / waiting_input / blocked / exited)
+- `CIStatus`, `VIProjectConfig`, `VITracker`
+- `createMockVISessions()` — returns realistic demo sessions for first-run experience
 
 **`src/paths.ts`** — storage path helpers, all rooted at `~/.pi/`:
-- `getPISessionsRegistryDir()` → `~/.pi/sessions/`
-- `getPIProjectBaseDir(projectId)` → `~/.pi/projects/{id}/`
-- `getPIObservabilityDir()` → `~/.pi/observability/`
+- `getVISessionsRegistryDir()` → `~/.pi/sessions/`
+- `getVIProjectBaseDir(projectId)` → `~/.pi/projects/{id}/`
+- `getVIObservabilityDir()` → `~/.pi/observability/`
 
 **`src/session-store.ts`** — PI session registry:
-- `listPISessions()` — reads all `~/.pi/sessions/*.json`; falls back to mock sessions if empty
-- `upsertPISession()`, `deletePISession()`
+- `listVISessions()` — reads all `~/.pi/sessions/*.json`; falls back to mock sessions if empty
+- `upsertVISession()`, `deleteVISession()`
 
 **`src/pi-control-plane.ts`** — core control-plane logic:
-- `derivePISessionState()` — maps raw session fields to a PI state label
-- `readPISessionArtifacts()` / `writePISessionHandoff()` — session summaries and handoff bundles
-- `upsertPIPendingQuestion()` / `respondToPIPendingQuestion()` — human-in-the-loop Q&A
-- `listPIGitHubConnectors()` / `upsertPIGitHubConnector()` — GitHub PAT/OAuth connector store
-- `isPISessionRestorable()` — predicate for restore button visibility
-- Idea board CRUD — `getPIIdeaBoard()`, `createPIIdeaCard()`, `movePIIdeaCard()`
-- Plan generation — `createPIIdeaPlan()` (calls LLM to expand idea to issue drafts)
+- `deriveVISessionState()` — maps raw session fields to a PI state label
+- `readVISessionArtifacts()` / `writeVISessionHandoff()` — session summaries and handoff bundles
+- `upsertVIPendingQuestion()` / `respondToVIPendingQuestion()` — human-in-the-loop Q&A
+- `listVIGitHubConnectors()` / `upsertVIGitHubConnector()` — GitHub PAT/OAuth connector store
+- `isVISessionRestorable()` — predicate for restore button visibility
+- Idea board CRUD — `getVIIdeaBoard()`, `createVIIdeaCard()`, `moveVIIdeaCard()`
+- Plan generation — `createVIIdeaPlan()` (calls LLM to expand idea to issue drafts)
 
 ---
 
@@ -52,7 +52,7 @@ Pure TypeScript library with no runtime framework dependency.
 
 Standalone WebSocket broker. No Next.js, no PI core dependency. Only `ws`.
 
-Remote agents connect to the relay when they cannot reach the PI dashboard directly (e.g., behind NAT or a firewall). The relay forwards job dispatch and approval requests between PI and the agent.
+Remote agents connect to the relay when they cannot reach the VI dashboard directly (e.g., behind NAT or a firewall). The relay forwards job dispatch and approval requests between PI and the agent.
 
 **`src/server.ts`** — HTTP upgrade handler + per-connection routing
 **`src/routing.ts`** — message routing table (pi → agent, agent → pi)
@@ -79,7 +79,7 @@ Next.js 15 app router. Server-rendered pages with 5-second client polling for li
 
 ### API routes
 
-**PI control plane** (`/api/pi/*`):
+**PI control plane** (`/api/vi/*`):
 - `approval-hub` — fleet approval state and policy
 - `control-plane` — session artifact reads
 - `github/connectors` — GitHub account management
@@ -114,7 +114,7 @@ spawning → working → pr_open → ci_failed → review_pending
          → cleanup → done
 ```
 
-`derivePISessionState()` in `@pi/core` maps a `PISession` to a human-readable attention level: **merge**, **respond**, **review**, **pending**, **working**, **done**.
+`deriveVISessionState()` in `@vi/core` maps a `VISession` to a human-readable attention level: **merge**, **respond**, **review**, **pending**, **working**, **done**.
 
 ---
 
@@ -132,8 +132,8 @@ Session artifacts (written by the agent via the PI control plane API) live in `~
 ## Remote agent protocol
 
 1. User generates enrollment token on the Machines page
-2. Remote machine runs `pi-agent` (Python CLI in `bridges/pi-agent/`) or any WebSocket client that speaks the PI job protocol
-3. Agent connects to relay or PI dashboard WebSocket directly
+2. Remote machine runs `vi-agent` (Python CLI in `bridges/vi-agent/`) or any WebSocket client that speaks the PI job protocol
+3. Agent connects to relay or VI dashboard WebSocket directly
 4. PI dispatches jobs; agent streams output back; approval requests flow through the same channel
 
 ---

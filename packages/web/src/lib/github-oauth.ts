@@ -24,11 +24,11 @@ export function getGitHubOAuthConfig(requestOrigin: string): {
 } {
   const clientId = requireEnv("GITHUB_OAUTH_CLIENT_ID");
   const clientSecret = requireEnv("GITHUB_OAUTH_CLIENT_SECRET");
-  const configuredRedirect = process.env.PI_GITHUB_OAUTH_REDIRECT_URI?.trim();
+  const configuredRedirect = process.env.VI_GITHUB_OAUTH_REDIRECT_URI?.trim();
   const redirectUri =
     configuredRedirect && configuredRedirect.length > 0
       ? configuredRedirect
-      : new URL("/api/pi/github/oauth/callback", requestOrigin).toString();
+      : new URL("/api/vi/github/oauth/callback", requestOrigin).toString();
 
   return { clientId, clientSecret, redirectUri };
 }

@@ -1,20 +1,20 @@
 import "server-only";
 
 import { cache } from "react";
-import { listPISessions, type PISession } from "@pi/core";
+import { listVISessions, type VISession } from "@vi/core";
 import {
   TERMINAL_STATUSES,
   type DashboardSession,
   type DashboardOrchestratorLink,
-  type PIControlPlaneData,
-  type PIIdeaBoardData,
+  type VIControlPlaneData,
+  type VIIdeaBoardData,
 } from "@/lib/types";
 import { getServices } from "@/lib/services";
 import { getPrimaryProjectId, getProjectName, getAllProjects, type ProjectInfo } from "@/lib/project-name";
 import { filterProjectSessions, filterWorkerSessions } from "@/lib/project-utils";
-import { getPIControlPlaneData } from "@/lib/pi-control-plane";
-import { getPIIdeaBoard } from "@/lib/pi-ideas";
-import { derivePISessionState } from "@pi/core";
+import { getVIControlPlaneData } from "@/lib/vi-control-plane";
+import { getVIIdeaBoard } from "@/lib/vi-ideas";
+import { deriveVISessionState } from "@vi/core";
 
 export interface DashboardPageData {
   sessions: DashboardSession[];
@@ -22,11 +22,11 @@ export interface DashboardPageData {
   projectName: string;
   projects: ProjectInfo[];
   selectedProjectId?: string;
-  controlPlane: PIControlPlaneData;
-  ideaBoard?: PIIdeaBoardData;
+  controlPlane: VIControlPlaneData;
+  ideaBoard?: VIIdeaBoardData;
 }
 
-function piSessionToDashboard(session: PISession): DashboardSession {
+function piSessionToDashboard(session: VISession): DashboardSession {
   const pr = session.pr
     ? {
         number: session.pr.number,
@@ -60,7 +60,7 @@ function piSessionToDashboard(session: PISession): DashboardSession {
     id: session.id,
     projectId: session.projectId,
     status: session.status,
-    piState: derivePISessionState(session),
+    piState: deriveVISessionState(session),
     activity: session.activity,
     branch: session.branch ?? null,
     issueId: session.issueId ?? null,
@@ -96,7 +96,7 @@ export function resolveDashboardProjectFilter(project?: string): string {
   return getPrimaryProjectId();
 }
 
-const EMPTY_CONTROL_PLANE: PIControlPlaneData = {
+const EMPTY_CONTROL_PLANE: VIControlPlaneData = {
   generatedAt: new Date().toISOString(),
   counts: { inbox: 0, recovery: 0, backlog: 0 },
   github: { available: false, selectedConnectorId: null, connectors: [] },
@@ -122,7 +122,7 @@ export const getDashboardPageData = cache(async function getDashboardPageData(
   };
 
   try {
-    const allSessions = await listPISessions();
+    const allSessions = await listVISessions();
     const workerSessions = filterWorkerSessions(allSessions, projectFilter, config.projects);
     pageData.sessions = workerSessions.map(piSessionToDashboard);
   } catch {
@@ -130,7 +130,7 @@ export const getDashboardPageData = cache(async function getDashboardPageData(
   }
 
   try {
-    pageData.controlPlane = await getPIControlPlaneData(projectFilter);
+    pageData.controlPlane = await getVIControlPlaneData(projectFilter);
   } catch {
     void 0;
   }
@@ -138,7 +138,7 @@ export const getDashboardPageData = cache(async function getDashboardPageData(
   try {
     const primaryProjectId = projectFilter !== "all" ? projectFilter : getPrimaryProjectId();
     if (primaryProjectId && config.projects[primaryProjectId]) {
-      pageData.ideaBoard = await getPIIdeaBoard(primaryProjectId);
+      pageData.ideaBoard = await getVIIdeaBoard(primaryProjectId);
     }
   } catch {
     void 0;

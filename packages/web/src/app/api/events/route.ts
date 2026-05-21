@@ -1,4 +1,4 @@
-import { listPISessions, derivePISessionState } from "@pi/core";
+import { listVISessions, deriveVISessionState } from "@vi/core";
 import { getAttentionLevel } from "@/lib/types";
 import { filterProjectSessions } from "@/lib/project-utils";
 import { getServices } from "@/lib/services";
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     async start(controller) {
       try {
         const { config } = await getServices();
-        const all = await listPISessions();
+        const all = await listVISessions();
         const sessions = filterProjectSessions(all, projectFilter, config.projects);
 
         const snapshot = {
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
               id: s.id,
               projectId: s.projectId,
               status: s.status,
-              piState: derivePISessionState(s),
+              piState: deriveVISessionState(s),
               activity: s.activity,
               branch: s.branch ?? null,
               issueId: s.issueId ?? null,

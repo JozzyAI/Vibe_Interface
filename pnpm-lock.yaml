@@ -41,7 +41,7 @@ importers:
 
   packages/web:
     dependencies:
-      '@pi/core':
+      '@vi/core':
         specifier: workspace:*
         version: link:../core
       '@xterm/addon-fit':

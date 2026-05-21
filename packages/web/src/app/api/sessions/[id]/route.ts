@@ -1,5 +1,5 @@
 import { type NextRequest } from "next/server";
-import { getPISession, derivePISessionState } from "@pi/core";
+import { getVISession, deriveVISessionState } from "@vi/core";
 import { getCorrelationId, jsonWithCorrelation } from "@/lib/observability";
 import { validateIdentifier } from "@/lib/validation";
 
@@ -13,13 +13,13 @@ export async function GET(
     const idErr = validateIdentifier(id, "id");
     if (idErr) return jsonWithCorrelation({ error: idErr }, { status: 400 }, correlationId);
 
-    const session = await getPISession(id);
+    const session = await getVISession(id);
     if (!session) {
       return jsonWithCorrelation({ error: "Session not found" }, { status: 404 }, correlationId);
     }
 
     return jsonWithCorrelation(
-      { session: { ...session, piState: derivePISessionState(session) } },
+      { session: { ...session, piState: deriveVISessionState(session) } },
       { status: 200 },
       correlationId,
     );

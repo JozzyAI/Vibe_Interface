@@ -5,18 +5,18 @@ import { dispatchRelayJob } from "@/lib/relay-dispatch";
 
 type RemoteProvider = "codex" | "claude";
 
-const PI_SESSION_INSTRUCTIONS = `
+const VI_SESSION_INSTRUCTIONS = `
 
-PI hook: host-side blockers belong in a separate PI utility session, not repo edits.
+VI hook: host-side blockers belong in a separate VI utility session, not repo edits.
 For GitHub login, Codex upgrades/restarts, host tool installs, browser login, or machine setup, run:
-pi-agent request-pi-session --title "Short title" --message "What is needed and why" --command "host command or script"
+vi-agent request-pi-session --title "Short title" --message "What is needed and why" --command "host command or script"
 `;
 
-function withPiHookInstructions(prompt?: string): string | undefined {
+function withViHookInstructions(prompt?: string): string | undefined {
   const trimmed = prompt?.trim();
   if (!trimmed) return undefined;
-  if (trimmed.includes("PI hook: host-side blockers")) return trimmed;
-  return `${trimmed}${PI_SESSION_INSTRUCTIONS}`;
+  if (trimmed.includes("VI hook: host-side blockers")) return trimmed;
+  return `${trimmed}${VI_SESSION_INSTRUCTIONS}`;
 }
 
 function buildProviderCommand(input: {
@@ -28,7 +28,7 @@ function buildProviderCommand(input: {
   model?: string;
   reasoningEffort?: string;
 }): string[] {
-  const command = ["pi-agent", input.provider];
+  const command = ["vi-agent", input.provider];
   if (input.binary?.trim()) {
     command.push("--binary", input.binary.trim());
   }
@@ -46,11 +46,11 @@ function buildProviderCommand(input: {
         ]
       : [];
   // Claude Code uses --model <value>.
-  // Precedence: explicit model from UI > PI_CLAUDE_DEFAULT_MODEL env var > omit flag.
-  // Never rely on shell aliases — pi-agent launches via subprocess, aliases are not expanded.
+  // Precedence: explicit model from UI > VI_CLAUDE_DEFAULT_MODEL env var > omit flag.
+  // Never rely on shell aliases — vi-agent launches via subprocess, aliases are not expanded.
   const claudeModel =
     input.provider === "claude"
-      ? (input.model?.trim() || process.env["PI_CLAUDE_DEFAULT_MODEL"]?.trim() || "")
+      ? (input.model?.trim() || process.env["VI_CLAUDE_DEFAULT_MODEL"]?.trim() || "")
       : "";
   const claudeOptions = claudeModel ? ["--model", claudeModel] : [];
   const extraOptions = [...codexOptions, ...claudeOptions];
@@ -60,12 +60,12 @@ function buildProviderCommand(input: {
     if (input.provider === "claude") {
       // Claude Code treats a positional text arg as a one-shot non-interactive task and exits.
       // Only pass launch flags here; the prompt is injected into the live REPL via tmux
-      // after startup (see PI_INITIAL_PROMPT in the job env).
+      // after startup (see VI_INITIAL_PROMPT in the job env).
       if (extraOptions.length > 0) {
         command.push("--", ...extraOptions);
       }
     } else {
-      command.push("--", ...extraOptions, withPiHookInstructions(input.prompt) ?? input.prompt.trim());
+      command.push("--", ...extraOptions, withViHookInstructions(input.prompt) ?? input.prompt.trim());
     }
   } else if (extraOptions.length > 0) {
     command.push("--", ...extraOptions);
@@ -116,12 +116,12 @@ export async function POST(request: NextRequest) {
           : undefined);
     // For Claude sessions, the initial prompt must be injected into the live REPL via
     // tmux after startup — not passed as a positional CLI arg (which triggers one-shot exit).
-    // PI_INITIAL_GOAL carries the clean user prompt for /plan injection.
-    // PI hook instructions are already present via CLAUDE.md and PI_HOOK_* env vars;
+    // VI_INITIAL_GOAL carries the clean user prompt for /plan injection.
+    // VI hook instructions are already present via CLAUDE.md and VI_HOOK_* env vars;
     // they must not be included in the /plan text.
     const jobEnv: Record<string, string> = { ...(body.env ?? {}) };
     if (body.provider === "claude" && body.prompt?.trim()) {
-      jobEnv["PI_INITIAL_GOAL"] = body.prompt.trim();
+      jobEnv["VI_INITIAL_GOAL"] = body.prompt.trim();
     }
     const { createRemoteAgentJob } = await getRemoteAgentsBackend();
     const job = await createRemoteAgentJob({

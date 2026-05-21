@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { PIAgentsEntry } from "@/components/PIAgentsEntry";
-import { PIWorkspaceShell } from "@/components/PIWorkspaceShell";
+import { VIAgentsEntry } from "@/components/VIAgentsEntry";
+import { VIWorkspaceShell } from "@/components/VIWorkspaceShell";
 import { getDashboardPageData } from "@/lib/dashboard-page-data";
-import { getPIIdeaExecutionRoot } from "@/lib/pi-ideas";
-import { readPIWorkspaceFiles } from "@/lib/pi-workspace-files";
+import { getVIIdeaExecutionRoot } from "@/lib/vi-ideas";
+import { readVIWorkspaceFiles } from "@/lib/vi-workspace-files";
 import { getRemoteApprovalOverview } from "@/lib/backend";
 import type { RemoteAgentSummary } from "@/lib/types";
 
@@ -115,19 +115,19 @@ function MachineSidebar({
 export default async function AgentsPage(props: {
   searchParams?: Promise<{ machine?: string }>;
 }) {
-  const workspaceRoot = getPIIdeaExecutionRoot();
+  const workspaceRoot = getVIIdeaExecutionRoot();
   const [searchParams, pageData, remoteOverview, workspaceFiles] = await Promise.all([
     props.searchParams,
     getDashboardPageData("all"),
     getRemoteApprovalOverview(),
-    readPIWorkspaceFiles(workspaceRoot),
+    readVIWorkspaceFiles(workspaceRoot),
   ]);
   const connectedCount = remoteOverview.agents.filter(
     (agent) => agent.connectionState === "connected",
   ).length;
 
   return (
-    <PIWorkspaceShell
+    <VIWorkspaceShell
       active="agents"
       title="Machines"
       subtitle="Connect computers and servers, then inspect each machine's current sessions and resumable history."
@@ -145,10 +145,10 @@ export default async function AgentsPage(props: {
       }
       sidebarFooter={`${connectedCount} online / ${remoteOverview.agents.length} known`}
     >
-      <PIAgentsEntry
+      <VIAgentsEntry
         initialRemoteOverview={remoteOverview}
         selectedAgentId={searchParams?.machine}
       />
-    </PIWorkspaceShell>
+    </VIWorkspaceShell>
   );
 }

@@ -1,13 +1,13 @@
 /**
  * RelayTerminalSubscriber — dashboard-side terminal relay client.
  *
- * Connects OUTBOUND to the relay server's /pi-agent-relay endpoint as the
- * PI dashboard subscriber.  Exposes the same interface as RemoteTerminalRelay
+ * Connects OUTBOUND to the relay server's /vi-agent-relay endpoint as the
+ * VI dashboard subscriber.  Exposes the same interface as RemoteTerminalRelay
  * so mux-websocket can use either transport transparently.
  *
  * Flow:
- *   relay:/pi-agent-relay  ←─ pi-agent (agent side)
- *   relay:/pi-agent-relay  ←─ this class (dashboard side)
+ *   relay:/vi-agent-relay  ←─ vi-agent (agent side)
+ *   relay:/vi-agent-relay  ←─ this class (dashboard side)
  *   Relay routes frames bidirectionally, tagging agent→dashboard with agentId
  *   and routing dashboard→agent by stripping agentId before forwarding.
  */
@@ -35,7 +35,7 @@ export class RelayTerminalSubscriber {
   private readonly announceListeners = new Set<(sessionId: string) => void>();
 
   constructor(
-    private readonly relayWsUrl: string, // wss://relay.example.com/pi-agent-relay
+    private readonly relayWsUrl: string, // wss://relay.example.com/vi-agent-relay
     private readonly relayToken: string,
   ) {}
 
@@ -142,9 +142,9 @@ export class RelayTerminalSubscriber {
   private connect(): void {
     if (this.stopped) return;
 
-    const url = this.relayWsUrl.endsWith("/pi-agent-relay")
+    const url = this.relayWsUrl.endsWith("/vi-agent-relay")
       ? this.relayWsUrl
-      : `${this.relayWsUrl.replace(/\/$/, "")}/pi-agent-relay`;
+      : `${this.relayWsUrl.replace(/\/$/, "")}/vi-agent-relay`;
 
     const ws = new WebSocket(url);
     this.ws = ws;

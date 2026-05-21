@@ -1,30 +1,30 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const PI_HOME = join(homedir(), ".pi");
+const VI_HOME = join(homedir(), ".pi");
 
-export function getPIHomeDir(): string {
-  return PI_HOME;
+export function getVIHomeDir(): string {
+  return VI_HOME;
 }
 
-export function getPIProjectBaseDir(projectId: string): string {
-  return join(PI_HOME, "projects", projectId);
+export function getVIProjectBaseDir(projectId: string): string {
+  return join(VI_HOME, "projects", projectId);
 }
 
-export function getPISessionsDir(projectId: string): string {
-  return join(getPIProjectBaseDir(projectId), "pi-state");
+export function getVISessionsDir(projectId: string): string {
+  return join(getVIProjectBaseDir(projectId), "pi-state");
 }
 
-export function getPIObservabilityDir(): string {
-  return join(PI_HOME, "observability");
+export function getVIObservabilityDir(): string {
+  return join(VI_HOME, "observability");
 }
 
-export function getPIRemoteAgentsDir(): string {
-  return join(PI_HOME, "remote-agents");
+export function getVIRemoteAgentsDir(): string {
+  return join(VI_HOME, "remote-agents");
 }
 
-export function getPISessionsRegistryDir(): string {
-  return join(PI_HOME, "sessions");
+export function getVISessionsRegistryDir(): string {
+  return join(VI_HOME, "sessions");
 }
 
 // Compatibility shims so pi-control-plane.ts function signatures stay stable.
@@ -33,9 +33,9 @@ import { basename } from "node:path";
 
 export function getProjectBaseDir(_configPath: string, projectPath: string): string {
   const projectId = basename(projectPath) || "default";
-  return getPIProjectBaseDir(projectId);
+  return getVIProjectBaseDir(projectId);
 }
 
 export function getObservabilityBaseDir(_configPath: string): string {
-  return getPIObservabilityDir();
+  return getVIObservabilityDir();
 }

@@ -4,18 +4,18 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
-  listPISessions,
-  upsertPISession,
-  getPIProjectBaseDir,
-  type PISession,
-  type PISessionStatus,
-} from "@pi/core";
+  listVISessions,
+  upsertVISession,
+  getVIProjectBaseDir,
+  type VISession,
+  type VISessionStatus,
+} from "@vi/core";
 
 // ---------------------------------------------------------------------------
 // PI project config
 // ---------------------------------------------------------------------------
 
-export interface PIProjectConfig {
+export interface VIProjectConfig {
   id: string;
   name?: string;
   path: string;
@@ -25,13 +25,13 @@ export interface PIProjectConfig {
 
 export interface PIConfig {
   configPath: string;
-  projects: Record<string, PIProjectConfig>;
+  projects: Record<string, VIProjectConfig>;
 }
 
 function loadPIConfig(): PIConfig {
-  const workspaceRoot = process.env["PI_WORKSPACE_ROOT"] ?? join(homedir(), "pi-workspace");
-  const primaryProjectId = process.env["PI_PROJECT_ID"] ?? "default";
-  const primaryProjectName = process.env["PI_PROJECT_NAME"] ?? "PI";
+  const workspaceRoot = process.env["VI_WORKSPACE_ROOT"] ?? join(homedir(), "pi-workspace");
+  const primaryProjectId = process.env["VI_PROJECT_ID"] ?? "default";
+  const primaryProjectName = process.env["VI_PROJECT_NAME"] ?? "PI";
 
   return {
     configPath: join(homedir(), ".pi"),
@@ -50,28 +50,28 @@ function loadPIConfig(): PIConfig {
 // PI session manager
 // ---------------------------------------------------------------------------
 
-export interface PISessionManager {
-  list: (projectId?: string) => Promise<PISession[]>;
-  get: (sessionId: string) => Promise<PISession | null>;
+export interface VISessionManager {
+  list: (projectId?: string) => Promise<VISession[]>;
+  get: (sessionId: string) => Promise<VISession | null>;
   spawn: (input: {
     projectId: string;
     prompt?: string;
     workspacePathOverride?: string;
     issueId?: string;
-  }) => Promise<PISession>;
+  }) => Promise<VISession>;
   send: (sessionId: string, _message: string) => Promise<void>;
 }
 
-function createPISessionManager(config: PIConfig): PISessionManager {
+function createVISessionManager(config: PIConfig): VISessionManager {
   return {
-    async list(projectId?: string): Promise<PISession[]> {
-      const all = await listPISessions();
+    async list(projectId?: string): Promise<VISession[]> {
+      const all = await listVISessions();
       if (!projectId || projectId === "all") return all;
       return all.filter((s) => s.projectId === projectId);
     },
 
-    async get(sessionId: string): Promise<PISession | null> {
-      const all = await listPISessions();
+    async get(sessionId: string): Promise<VISession | null> {
+      const all = await listVISessions();
       return all.find((s) => s.id === sessionId) ?? null;
     },
 
@@ -80,21 +80,21 @@ function createPISessionManager(config: PIConfig): PISessionManager {
       prompt?: string;
       workspacePathOverride?: string;
       issueId?: string;
-    }): Promise<PISession> {
+    }): Promise<VISession> {
       const project = config.projects[input.projectId];
       const now = new Date().toISOString();
-      const session: PISession = {
+      const session: VISession = {
         id: `session_${randomUUID()}`,
         title: input.prompt
           ? input.prompt.split("\n")[0]?.slice(0, 80) ?? "Untitled session"
           : "Untitled session",
         projectId: input.projectId,
         issueId: input.issueId,
-        status: "spawning" as PISessionStatus,
+        status: "spawning" as VISessionStatus,
         activity: null,
         branch: null,
         pr: null,
-        tool: process.env["PI_DEFAULT_AGENT"] ?? "claude-code",
+        tool: process.env["VI_DEFAULT_AGENT"] ?? "claude-code",
         budget: { estimatedTokens: 0, estimatedUsd: 0 },
         lastUpdate: "Queued for agent",
         createdAt: now,
@@ -104,10 +104,10 @@ function createPISessionManager(config: PIConfig): PISessionManager {
           ...(input.prompt ? { userPrompt: input.prompt } : {}),
           ...(input.workspacePathOverride
             ? { workspacePath: input.workspacePathOverride }
-            : { workspacePath: project?.path ?? getPIProjectBaseDir(input.projectId) }),
+            : { workspacePath: project?.path ?? getVIProjectBaseDir(input.projectId) }),
         },
       };
-      await upsertPISession(session);
+      await upsertVISession(session);
       return session;
     },
 
@@ -124,7 +124,7 @@ function createPISessionManager(config: PIConfig): PISessionManager {
 
 export interface PIServices {
   config: PIConfig;
-  sessionManager: PISessionManager;
+  sessionManager: VISessionManager;
 }
 
 const globalForPIServices = globalThis as typeof globalThis & {
@@ -137,7 +137,7 @@ export function getPIServices(): PIServices {
     const config = loadPIConfig();
     globalForPIServices._piServices = {
       config,
-      sessionManager: createPISessionManager(config),
+      sessionManager: createVISessionManager(config),
     };
   }
   return globalForPIServices._piServices;
@@ -152,7 +152,7 @@ export function getServices(): Promise<PIServices> {
 // Backlog — stub (returns empty; will be wired to GitHub connector later)
 // ---------------------------------------------------------------------------
 
-export interface PIBacklogIssue {
+export interface VIBacklogIssue {
   id: string;
   title: string;
   url: string;
@@ -160,11 +160,11 @@ export interface PIBacklogIssue {
   projectId: string;
 }
 
-export async function getBacklogIssues(): Promise<PIBacklogIssue[]> {
+export async function getBacklogIssues(): Promise<VIBacklogIssue[]> {
   return [];
 }
 
-export async function getVerifyIssues(): Promise<PIBacklogIssue[]> {
+export async function getVerifyIssues(): Promise<VIBacklogIssue[]> {
   return [];
 }
 

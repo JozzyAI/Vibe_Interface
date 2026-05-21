@@ -1,5 +1,5 @@
 {
-  "name": "@pi/relay",
+  "name": "@vi/relay",
   "version": "0.1.0",
   "private": true,
   "description": "Relay service for remote PI agents",

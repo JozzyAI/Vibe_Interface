@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# One-time setup for a GCP e2-micro VM running the PI relay.
+# One-time setup for a GCP e2-micro VM running the VI relay.
 # Tested on Debian 12 (bookworm) — the GCP default image.
 #
 # Usage:
-#   sudo bash vm-init.sh <domain> <pi-relay-token> <pi-relay-admin-token> [disk-device]
+#   sudo bash vm-init.sh <domain> <vi-relay-token> <vi-relay-admin-token> [disk-device]
 #
 # Example:
 #   sudo bash vm-init.sh relay.dynastylab.ai tok_abc123 adm_xyz789 /dev/sdb
@@ -13,12 +13,12 @@
 
 set -euo pipefail
 
-DOMAIN="${1:?Usage: $0 <domain> <pi-relay-token> <pi-relay-admin-token> [disk-device]}"
-PI_RELAY_TOKEN="${2:?Missing pi-relay-token}"
-PI_RELAY_ADMIN_TOKEN="${3:?Missing pi-relay-admin-token}"
+DOMAIN="${1:?Usage: $0 <domain> <vi-relay-token> <vi-relay-admin-token> [disk-device]}"
+VI_RELAY_TOKEN="${2:?Missing vi-relay-token}"
+VI_RELAY_ADMIN_TOKEN="${3:?Missing vi-relay-admin-token}"
 DATA_DISK="${4:-/dev/sdb}"
 DATA_MOUNT="/data"
-REPO_DIR="/opt/pi"
+REPO_DIR="/opt/vi"
 
 echo "[1/8] Mount persistent disk $DATA_DISK -> $DATA_MOUNT"
 if ! blkid "$DATA_DISK" > /dev/null 2>&1; then
@@ -53,48 +53,48 @@ if [[ -d "$REPO_DIR" ]]; then
 else
   git clone https://github.com/JozzyAI/Project_Interface.git "$REPO_DIR"
 fi
-docker build -t pi-relay "$REPO_DIR/packages/relay"
+docker build -t vi-relay "$REPO_DIR/packages/relay"
 
 echo "[5/8] Write env file"
-cat > /etc/pi-relay.env <<ENV
-PI_RELAY_PORT=8787
-PI_RELAY_HOST=0.0.0.0
-PI_RELAY_DB_PATH=/data/pi-relay.db
-PI_RELAY_TOKEN=${PI_RELAY_TOKEN}
-PI_RELAY_ADMIN_TOKEN=${PI_RELAY_ADMIN_TOKEN}
+cat > /etc/vi-relay.env <<ENV
+VI_RELAY_PORT=8787
+VI_RELAY_HOST=0.0.0.0
+VI_RELAY_DB_PATH=/data/vi-relay.db
+VI_RELAY_TOKEN=${VI_RELAY_TOKEN}
+VI_RELAY_ADMIN_TOKEN=${VI_RELAY_ADMIN_TOKEN}
 ENV
-chmod 600 /etc/pi-relay.env
+chmod 600 /etc/vi-relay.env
 
 echo "[6/8] Create systemd service"
-cat > /etc/systemd/system/pi-relay.service <<UNIT
+cat > /etc/systemd/system/vi-relay.service <<UNIT
 [Unit]
-Description=PI Relay
+Description=VI Relay
 After=docker.service network-online.target
 Requires=docker.service
 
 [Service]
 Restart=always
 RestartSec=5
-ExecStartPre=-/usr/bin/docker stop pi-relay
-ExecStartPre=-/usr/bin/docker rm pi-relay
-ExecStart=/usr/bin/docker run --rm --name pi-relay \\
-  --env-file /etc/pi-relay.env \\
+ExecStartPre=-/usr/bin/docker stop vi-relay
+ExecStartPre=-/usr/bin/docker rm vi-relay
+ExecStart=/usr/bin/docker run --rm --name vi-relay \\
+  --env-file /etc/vi-relay.env \\
   -v /data:/data \\
   -p 127.0.0.1:8787:8787 \\
-  pi-relay
-ExecStop=/usr/bin/docker stop pi-relay
+  vi-relay
+ExecStop=/usr/bin/docker stop vi-relay
 
 [Install]
 WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
-systemctl enable pi-relay
-systemctl start pi-relay
+systemctl enable vi-relay
+systemctl start vi-relay
 
 echo "[7/8] Configure nginx"
-cp "$REPO_DIR/packages/relay/deploy/gcp/nginx.conf" /etc/nginx/sites-available/pi-relay
-sed -i "s/YOUR_DOMAIN/$DOMAIN/g" /etc/nginx/sites-available/pi-relay
-ln -sf /etc/nginx/sites-available/pi-relay /etc/nginx/sites-enabled/pi-relay
+cp "$REPO_DIR/packages/relay/deploy/gcp/nginx.conf" /etc/nginx/sites-available/vi-relay
+sed -i "s/YOUR_DOMAIN/$DOMAIN/g" /etc/nginx/sites-available/vi-relay
+ln -sf /etc/nginx/sites-available/vi-relay /etc/nginx/sites-enabled/vi-relay
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl reload nginx
@@ -103,9 +103,9 @@ echo "[8/8] Obtain SSL certificate (requires DNS already pointing to this VM)"
 certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "admin@${DOMAIN}"
 
 echo ""
-echo "PI relay is live at https://$DOMAIN"
-echo "Set in dashboard .env.local:   PI_SERVER=https://$DOMAIN"
-echo "Set in pi-agent config:        PI_SERVER=https://$DOMAIN"
+echo "VI relay is live at https://$DOMAIN"
+echo "Set in dashboard .env.local:   VI_SERVER=https://$DOMAIN"
+echo "Set in vi-agent config:        VI_SERVER=https://$DOMAIN"
 echo ""
 echo "When ready, shut down Fly.io:"
-echo "  fly apps destroy pi-relay-jozzy"
+echo "  fly apps destroy vi-relay-jozzy"

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { PIActivityState, SSESnapshotEvent } from "@/lib/types";
+import type { VIActivityState, SSESnapshotEvent } from "@/lib/types";
 
 interface SessionActivity {
-  activity: PIActivityState | null;
+  activity: VIActivityState | null;
 }
 
 /**

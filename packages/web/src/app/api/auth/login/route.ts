@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 
 export async function POST(request: NextRequest) {
   const { token } = (await request.json()) as { token?: string };
-  const required = process.env.PI_ACCESS_TOKEN?.trim();
+  const required = process.env.VI_ACCESS_TOKEN?.trim();
 
   if (!required) {
     // Auth not configured — open access

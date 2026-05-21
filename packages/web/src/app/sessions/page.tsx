@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { PIApprovalInbox } from "@/components/PIApprovalInbox";
-import { getPISessionSidebarCount, PISessionSidebar } from "@/components/PISessionSidebar";
-import { PIWorkspaceShell } from "@/components/PIWorkspaceShell";
+import { VIApprovalInbox } from "@/components/VIApprovalInbox";
+import { getVISessionSidebarCount, VISessionSidebar } from "@/components/VISessionSidebar";
+import { VIWorkspaceShell } from "@/components/VIWorkspaceShell";
 import { getDashboardPageData } from "@/lib/dashboard-page-data";
-import { getPIApprovalHubData } from "@/lib/pi-approval-hub";
-import { getPIIdeaExecutionRoot } from "@/lib/pi-ideas";
-import { readPIWorkspaceFiles } from "@/lib/pi-workspace-files";
+import { getVIApprovalHubData } from "@/lib/vi-approval-hub";
+import { getVIIdeaExecutionRoot } from "@/lib/vi-ideas";
+import { readVIWorkspaceFiles } from "@/lib/vi-workspace-files";
 import { getRemoteApprovalOverview } from "@/lib/backend";
 
 export const dynamic = "force-dynamic";
@@ -17,11 +17,11 @@ export const metadata: Metadata = {
 };
 
 export default async function SessionsPage() {
-  const workspaceRoot = getPIIdeaExecutionRoot();
+  const workspaceRoot = getVIIdeaExecutionRoot();
   const [pageData, remoteOverview, workspaceFiles] = await Promise.all([
     getDashboardPageData("all"),
     getRemoteApprovalOverview(),
-    readPIWorkspaceFiles(workspaceRoot),
+    readVIWorkspaceFiles(workspaceRoot),
   ]);
   const cards = await Promise.all(
     pageData.projects.map(async (project: { id: string; name: string; sessionPrefix?: string }) => {
@@ -29,7 +29,7 @@ export default async function SessionsPage() {
       return {
         projectId: project.id,
         projectName: project.name,
-        hub: await getPIApprovalHubData({
+        hub: await getVIApprovalHubData({
           projectId: project.id,
           sessions: projectPageData.sessions,
           controlPlane: projectPageData.controlPlane,
@@ -40,7 +40,7 @@ export default async function SessionsPage() {
   const connectedCount = remoteOverview.agents.filter(
     (agent) => agent.connectionState === "connected",
   ).length;
-  const sessionCount = getPISessionSidebarCount(cards, remoteOverview);
+  const sessionCount = getVISessionSidebarCount(cards, remoteOverview);
   const needsCount =
     cards.reduce((total: number, card: { hub?: { stats?: { inbox?: number; failed?: number; running?: number } } }) => total + (card.hub?.stats?.inbox ?? 0) + (card.hub?.stats?.failed ?? 0), 0) +
     remoteOverview.stats.pending +
@@ -50,7 +50,7 @@ export default async function SessionsPage() {
     remoteOverview.stats.running;
 
   return (
-    <PIWorkspaceShell
+    <VIWorkspaceShell
       active="sessions"
       title="Sessions"
       subtitle="One place for running work, blocked approvals, failed sessions, and live CLI access."
@@ -59,7 +59,7 @@ export default async function SessionsPage() {
       connectedCount={connectedCount}
       workspaceRoot={workspaceRoot}
       workspaceFiles={workspaceFiles}
-      sidebarContent={<PISessionSidebar cards={cards} remoteOverview={remoteOverview} />}
+      sidebarContent={<VISessionSidebar cards={cards} remoteOverview={remoteOverview} />}
       sidebarFooter={`${sessionCount} session${sessionCount === 1 ? "" : "s"} shown`}
       rightSidebarTitle="Sessions"
       rightSidebarContent={
@@ -98,7 +98,7 @@ export default async function SessionsPage() {
       }
       hideHeader
     >
-      <PIApprovalInbox initialCards={cards} initialRemoteOverview={remoteOverview} hideSummary />
-    </PIWorkspaceShell>
+      <VIApprovalInbox initialCards={cards} initialRemoteOverview={remoteOverview} hideSummary />
+    </VIWorkspaceShell>
   );
 }
