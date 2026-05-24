@@ -11,7 +11,20 @@ import { WebSocketServer, WebSocket } from "ws";
 import { homedir, userInfo } from "node:os";
 import { spawn, spawnSync } from "node:child_process";
 import { findTmux, resolveTmuxSession, validateSessionId } from "./tmux-utils.js";
-import type { RemoteTerminalRelay } from "./remote-terminal-relay.js";
+/** Minimal interface covering all relay methods used by TerminalManager/createMuxWebSocket. */
+interface ITerminalRelay {
+  getRelayForSession(sessionId: string): unknown;
+  openRemote(sessionId: string, cols: number, rows: number): void;
+  writeRemote(sessionId: string, data: string): void;
+  resizeRemote(sessionId: string, cols: number, rows: number): void;
+  closeRemote(sessionId: string): void;
+  subscribeRemote(
+    sessionId: string,
+    onData: (data: string) => void,
+    onExited: (code: number) => void,
+  ): () => void;
+  onAnnounce(listener: (sessionId: string) => void): () => void;
+}
 
 // These types mirror src/lib/mux-protocol.ts exactly.
 // tsconfig.server.json constrains rootDir to "server/", so we cannot import
@@ -236,9 +249,9 @@ const MAX_REATTACH_ATTEMPTS = 3;
 class TerminalManager {
   private terminals = new Map<string, ManagedTerminal>();
   private TMUX: string;
-  private remoteRelay: RemoteTerminalRelay | null;
+  private remoteRelay: ITerminalRelay | null;
 
-  constructor(tmuxPath?: string, remoteRelay: RemoteTerminalRelay | null = null) {
+  constructor(tmuxPath?: string, remoteRelay: ITerminalRelay | null = null) {
     this.TMUX = tmuxPath ?? findTmux();
     this.remoteRelay = remoteRelay;
   }
@@ -589,7 +602,7 @@ class TerminalManager {
  */
 export function createMuxWebSocket(
   tmuxPath?: string,
-  remoteRelay: RemoteTerminalRelay | null = null,
+  remoteRelay: ITerminalRelay | null = null,
 ): WebSocketServer | null {
   if (!ptySpawn) {
     console.warn("[MuxServer] node-pty not available — mux WebSocket will be disabled");
