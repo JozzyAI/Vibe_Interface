@@ -1,0 +1,25 @@
+{
+  "name": "@vi/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "android": "expo start --android",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vi/client-sdk": "workspace:*",
+    "expo": "~56.0.4",
+    "expo-router": "~56.2.6",
+    "expo-secure-store": "~56.0.4",
+    "expo-status-bar": "~56.0.4",
+    "react": "19.0.0",
+    "react-native": "0.79.2"
+  },
+  "devDependencies": {
+    "@types/react": "~18.3.12",
+    "typescript": "^5.7.0"
+  }
+}

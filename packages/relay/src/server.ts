@@ -297,7 +297,7 @@ export function createRelayServer(): RelayServer {
         }
 
         // revoke enrollment
-        const revokeMatch = pathname.match(/^\/v1\/pi\/enrollments\/([^/]+)\/revoke$/);
+        const revokeMatch = pathname.match(/^\/v1\/vi\/enrollments\/([^/]+)\/revoke$/);
         if (revokeMatch && req.method === "POST") {
           const enrollmentId = decodeURIComponent(revokeMatch[1] ?? "");
           const enrollment = store.revokeEnrollment(enrollmentId);
@@ -328,7 +328,7 @@ export function createRelayServer(): RelayServer {
         }
 
         // archive job
-        const archiveMatch = pathname.match(/^\/v1\/pi\/jobs\/([^/]+)\/archive$/);
+        const archiveMatch = pathname.match(/^\/v1\/vi\/jobs\/([^/]+)\/archive$/);
         if (archiveMatch && req.method === "POST") {
           const jobId = decodeURIComponent(archiveMatch[1] ?? "");
           const body = await readJsonBody(req) as Record<string, unknown>;
@@ -338,7 +338,7 @@ export function createRelayServer(): RelayServer {
         }
 
         // delete job
-        const deleteMatch = pathname.match(/^\/v1\/pi\/jobs\/([^/]+)\/delete$/);
+        const deleteMatch = pathname.match(/^\/v1\/vi\/jobs\/([^/]+)\/delete$/);
         if (deleteMatch && req.method === "POST") {
           const jobId = decodeURIComponent(deleteMatch[1] ?? "");
           const body = await readJsonBody(req) as Record<string, unknown>;
@@ -348,7 +348,7 @@ export function createRelayServer(): RelayServer {
         }
 
         // restart job
-        const restartMatch = pathname.match(/^\/v1\/pi\/jobs\/([^/]+)\/restart$/);
+        const restartMatch = pathname.match(/^\/v1\/vi\/jobs\/([^/]+)\/restart$/);
         if (restartMatch && req.method === "POST") {
           const jobId = decodeURIComponent(restartMatch[1] ?? "");
           const body = await readJsonBody(req) as Record<string, unknown>;
@@ -359,7 +359,7 @@ export function createRelayServer(): RelayServer {
         }
 
         // respond to approval
-        const respondMatch = pathname.match(/^\/v1\/pi\/approvals\/([^/]+)\/respond$/);
+        const respondMatch = pathname.match(/^\/v1\/vi\/approvals\/([^/]+)\/respond$/);
         if (respondMatch && req.method === "POST") {
           const requestId = decodeURIComponent(respondMatch[1] ?? "");
           const body = await readJsonBody(req) as Record<string, unknown>;
@@ -374,7 +374,7 @@ export function createRelayServer(): RelayServer {
         }
 
         // remove agent
-        const removeAgentMatch = pathname.match(/^\/v1\/pi\/agents\/([^/]+)\/remove$/);
+        const removeAgentMatch = pathname.match(/^\/v1\/vi\/agents\/([^/]+)\/remove$/);
         if (removeAgentMatch && req.method === "POST") {
           const agentId = decodeURIComponent(removeAgentMatch[1] ?? "");
           store.removeAgent(agentId);
@@ -397,7 +397,7 @@ export function createRelayServer(): RelayServer {
         }
 
         // reconnect agent (create re-pair enrollment)
-        const reconnectMatch = pathname.match(/^\/v1\/pi\/agents\/([^/]+)\/reconnect$/);
+        const reconnectMatch = pathname.match(/^\/v1\/vi\/agents\/([^/]+)\/reconnect$/);
         if (reconnectMatch && req.method === "POST") {
           const agentId = decodeURIComponent(reconnectMatch[1] ?? "");
           const result = store.createReconnectEnrollment(agentId);
@@ -406,11 +406,28 @@ export function createRelayServer(): RelayServer {
         }
 
         // restart daemon
-        const restartDaemonMatch = pathname.match(/^\/v1\/pi\/agents\/([^/]+)\/restart-daemon$/);
+        const restartDaemonMatch = pathname.match(/^\/v1\/vi\/agents\/([^/]+)\/restart-daemon$/);
         if (restartDaemonMatch && req.method === "POST") {
           const agentId = decodeURIComponent(restartDaemonMatch[1] ?? "");
           const command = store.requestDaemonRestart(agentId);
           jsonResponse(res, 200, { command });
+          return;
+        }
+
+        // queue job input
+        const jobInputMatch = pathname.match(/^\/v1\/vi\/jobs\/([^/]+)\/input$/);
+        if (jobInputMatch && req.method === "POST") {
+          const jobId = decodeURIComponent(jobInputMatch[1] ?? "");
+          const body = await readJsonBody(req) as Record<string, unknown>;
+          const job = store.queueJobInput(jobId, {
+            text: String(body["text"] ?? ""),
+            submit: body["submit"] !== false,
+            key: body["key"] === "escape" ? "escape" : undefined,
+          });
+          const dispatch = dispatchToPeer(registry, "job_input", job.agentId, {
+            jobId, text: body["text"], submit: body["submit"] !== false, key: body["key"],
+          });
+          jsonResponse(res, 200, { job, relayDispatch: dispatch });
           return;
         }
 

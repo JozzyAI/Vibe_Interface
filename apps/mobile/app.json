@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "VI Mobile",
+    "slug": "vi-mobile",
+    "version": "0.1.0",
+    "scheme": "vi",
+    "platforms": ["ios", "android"],
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.dynastylab.vi.mobile"
+    },
+    "android": {
+      "package": "ai.dynastylab.vi.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#000000"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

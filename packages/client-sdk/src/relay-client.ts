@@ -212,6 +212,17 @@ export class VIRelayClient {
     return result.approvalRequest;
   }
 
+  async sendJobInput(
+    jobId: string,
+    input: { text: string; submit?: boolean; key?: "escape" },
+  ): Promise<RemoteAgentJob> {
+    const result = await this.post<{ job: RemoteAgentJob; relayDispatch: unknown }>(
+      `/v1/vi/jobs/${encodeURIComponent(jobId)}/input`,
+      input,
+    );
+    return result.job;
+  }
+
   async dispatchRelayApprovalDecision(agentId: string, request: unknown): Promise<{ delivered: boolean; targetPeerId: string }> {
     return this.post("/v1/vi/approval-decisions", { agentId, request });
   }

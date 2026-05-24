@@ -112,6 +112,12 @@ interface EnrollmentRow {
   expires_at: string; created_at: string;
 }
 
+interface InputRow {
+  input_id: string; job_id: string; agent_id: string;
+  text: string; submit: number; key: string | null;
+  status: string; created_at: string; sent_at: string | null;
+}
+
 // ── Serializers (row → wire object) ──────────────────────────────────────────
 
 function serializeAgent(row: AgentRow) {
@@ -207,6 +213,17 @@ function serializeApproval(row: ApprovalRow) {
     decidedAt: row.decided_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function serializeInput(row: InputRow) {
+  return {
+    inputId: row.input_id,
+    text: row.text,
+    submit: row.submit === 1,
+    key: (row.key as "escape" | undefined) ?? undefined,
+    createdAt: row.created_at,
+    sentAt: row.sent_at ?? undefined,
   };
 }
 
@@ -416,6 +433,17 @@ export function pollAgent(agentId: string) {
     "SELECT * FROM approval_requests WHERE agent_id = ? ORDER BY created_at DESC LIMIT 100",
   ).all(agentId) as ApprovalRow[];
 
+  // Fetch pending inputs and mark them as sent in one round-trip
+  const pendingInputRows = db.prepare(
+    "SELECT * FROM job_inputs WHERE agent_id = ? AND status = 'pending' ORDER BY created_at ASC",
+  ).all(agentId) as InputRow[];
+  if (pendingInputRows.length > 0) {
+    const placeholders = pendingInputRows.map(() => "?").join(",");
+    db.prepare(`UPDATE job_inputs SET status = 'sent', sent_at = ? WHERE input_id IN (${placeholders})`).run(
+      t, ...pendingInputRows.map((r) => r.input_id),
+    );
+  }
+
   return {
     agent: serializeAgent(db.prepare("SELECT * FROM agents WHERE agent_id = ?").get(agentId) as AgentRow),
     pendingRequests: approvals.filter((r) => r.status === "open").map(serializeApproval),
@@ -424,6 +452,7 @@ export function pollAgent(agentId: string) {
     jobs: activeJobs.map(serializeJob),
     removedJobIds: removedJobRows.map((r) => r.job_id),
     controlCommands: pendingCmds.map((c) => ({ commandId: c.command_id, agentId, type: c.type, status: "delivered", createdAt: c.created_at, deliveredAt: t })),
+    pendingInputs: pendingInputRows.map(serializeInput),
   };
 }
 
@@ -681,6 +710,29 @@ export function restartJob(jobId: string, agentId?: string) {
   );
   db.prepare("UPDATE jobs SET restarted_as_job_id = ?, updated_at = ? WHERE job_id = ?").run(childId, t, jobId);
   return serializeJob(db.prepare("SELECT * FROM jobs WHERE job_id = ?").get(childId) as JobRow);
+}
+
+// ── Job input operations ──────────────────────────────────────────────────────
+
+export function queueJobInput(
+  jobId: string,
+  input: { text: string; submit?: boolean; key?: "escape" },
+) {
+  const db = getDb();
+  const job = db.prepare("SELECT * FROM jobs WHERE job_id = ?").get(jobId) as JobRow | undefined;
+  if (!job) throw new Error(`Unknown job: ${jobId}`);
+  const inputId = uid("inp");
+  const t = now();
+  db.prepare(`
+    INSERT INTO job_inputs (input_id, job_id, agent_id, text, submit, key, status, created_at)
+    VALUES (?,?,?,?,?,?,?,?)
+  `).run(
+    inputId, jobId, job.agent_id,
+    input.text.trim(), input.submit !== false ? 1 : 0,
+    input.key ?? null, "pending", t,
+  );
+  db.prepare("UPDATE jobs SET updated_at = ? WHERE job_id = ?").run(t, jobId);
+  return serializeJob(db.prepare("SELECT * FROM jobs WHERE job_id = ?").get(jobId) as JobRow);
 }
 
 // ── Approval operations ───────────────────────────────────────────────────────

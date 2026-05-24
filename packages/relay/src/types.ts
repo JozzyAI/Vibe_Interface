@@ -8,6 +8,7 @@ export type RelayMessageType =
   | "approval_decision"
   | "job_request"
   | "job_report"
+  | "job_input"
   | "presence_sync"
   | "error";
 

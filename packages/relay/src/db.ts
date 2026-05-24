@@ -169,6 +169,20 @@ export function initSchema(db: Db): void {
       agent_id   TEXT,
       removed_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS job_inputs (
+      input_id   TEXT PRIMARY KEY,
+      job_id     TEXT NOT NULL,
+      agent_id   TEXT NOT NULL,
+      text       TEXT NOT NULL DEFAULT '',
+      submit     INTEGER NOT NULL DEFAULT 1,
+      key        TEXT,
+      status     TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL,
+      sent_at    TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_job_inputs_job ON job_inputs(job_id, status);
+    CREATE INDEX IF NOT EXISTS idx_job_inputs_agent ON job_inputs(agent_id, status);
   `);
 }
 
