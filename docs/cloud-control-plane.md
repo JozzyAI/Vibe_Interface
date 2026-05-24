@@ -170,9 +170,9 @@ daemon-abc:daemon:my-machines,pi-xyz:pi:dashboard
 | `POST /v1/daemon/jobs/report` | vi-agent | cloud relay |
 | `POST /v1/daemon/requests` | vi-agent | cloud relay |
 | `POST /v1/daemon/enrollments/consume` | vi-agent pair | cloud relay |
-| `GET /v1/pi/overview` | dashboard | cloud relay |
-| `POST /v1/pi/jobs` | dashboard | cloud relay |
-| `POST /v1/pi/approvals/:id/respond` | dashboard | cloud relay |
+| `GET /v1/vi/overview` | dashboard | cloud relay |
+| `POST /v1/vi/jobs` | dashboard | cloud relay |
+| `POST /v1/vi/approvals/:id/respond` | dashboard | cloud relay |
 | `GET /api/remote-agents/*` | vi-agent (local) | local dashboard |
 | `ws://../vi-agent-relay` | vi-agent terminal | relay WebSocket |
 

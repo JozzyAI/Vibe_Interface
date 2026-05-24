@@ -2,7 +2,7 @@
  * backend.ts — mode switching for remote-agent operations.
  *
  * Local mode  (default): reads/writes local data/store.json via remote-agents.ts
- * Cloud mode  (VI_RELAY_BASE_URL + VI_RELAY_VI_TOKEN set): calls relay /v1/pi/*
+ * Cloud mode  (VI_RELAY_BASE_URL + VI_RELAY_VI_TOKEN set): calls relay /v1/vi/*
  *
  * All callers use getBackend() so the switch is in one place.
  */

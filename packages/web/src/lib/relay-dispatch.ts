@@ -82,7 +82,7 @@ export function dispatchRelayApprovalDecision(
   agentId: string,
   request: RemoteApprovalRequest,
 ): Promise<RelayDispatchAttempt> {
-  return postRelay("/v1/pi/approval-decisions", {
+  return postRelay("/v1/vi/approval-decisions", {
     agentId,
     request,
   });
@@ -92,7 +92,7 @@ export function dispatchRelayJob(
   agentId: string,
   job: RemoteAgentJob,
 ): Promise<RelayDispatchAttempt> {
-  return postRelay("/v1/pi/jobs/dispatch", {
+  return postRelay("/v1/vi/jobs/dispatch", {
     agentId,
     job,
   });

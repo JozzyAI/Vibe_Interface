@@ -273,7 +273,7 @@ Set `VI_PUBLIC_URL=http://192.168.x.x:3000` in `.env.local` so pair commands sho
 | `VI_PUBLIC_URL` | Local | LAN URL used in pair commands, e.g. `http://192.168.1.83:3000` |
 | `VI_ACCESS_TOKEN` | Both | If set, all dashboard pages require this token |
 | `VI_RELAY_BASE_URL` | Cloud | Relay HTTP URL. Activates cloud mode when set with `VI_RELAY_VI_TOKEN` |
-| `VI_RELAY_VI_TOKEN` | Cloud | Bearer token for dashboard → relay `/v1/pi/*` calls |
+| `VI_RELAY_VI_TOKEN` | Cloud | Bearer token for dashboard → relay `/v1/vi/*` calls |
 | `VI_RELAY_DAEMON_TOKEN` | Cloud | Daemon token embedded in generated pair commands |
 | `VI_RELAY_PUBLIC_WS_URL` | Cloud | Public WS URL baked into enrollment pair commands |
 | `VI_CLAUDE_DEFAULT_MODEL` | Both | Default model for new Claude sessions, e.g. `claude-sonnet-4-6` |
