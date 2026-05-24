@@ -1,248 +1,71 @@
 /**
- * relay-cloud-client.ts
- *
- * Dashboard HTTP client for VI Cloud relay /v1/vi/* routes.
- * Activated when VI_RELAY_BASE_URL + VI_RELAY_VI_TOKEN are set.
- * Returns the same TypeScript shapes as remote-agents.ts so all API routes
- * and UI components work without changes.
+ * Thin wrapper — instantiates VIRelayClient from env vars and re-exports
+ * all methods as module-level functions so the rest of the codebase is unchanged.
+ * Import "server-only" ensures this file never leaks into client bundles.
  */
 import "server-only";
-import type {
-  RemoteAgentJob,
-  RemoteApprovalOverview,
-  RemoteApprovalRequest,
-  RemoteEnrollmentSummary,
-} from "@/lib/types";
+import { VIRelayClient } from "@vi/client-sdk";
 
-function relayBase(): string {
-  return (process.env["VI_RELAY_BASE_URL"] ?? "").trim().replace(/\/$/, "").replace(/\/ws$/, "");
-}
-
-function viToken(): string {
-  return process.env["VI_RELAY_VI_TOKEN"] ?? "";
-}
-
-async function piPost<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${relayBase()}${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${viToken()}`,
-      "Content-Type": "application/json",
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    cache: "no-store",
+function makeClient() {
+  return new VIRelayClient({
+    baseUrl: (process.env["VI_RELAY_BASE_URL"] ?? "").trim(),
+    viToken: process.env["VI_RELAY_VI_TOKEN"] ?? "",
   });
-  const json = await res.json() as { error?: string } & T;
-  if (!res.ok) throw new Error(json.error ?? `Relay request failed (${res.status})`);
-  return json;
 }
 
-async function piGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${relayBase()}${path}`, {
-    headers: { Authorization: `Bearer ${viToken()}` },
-    cache: "no-store",
-  });
-  const json = await res.json() as { error?: string } & T;
-  if (!res.ok) throw new Error(json.error ?? `Relay request failed (${res.status})`);
-  return json;
-}
+// Re-export every method as a standalone async function to preserve
+// the existing import style used throughout API routes and server components.
 
-async function viPatch<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${relayBase()}${path}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${viToken()}`,
-      "Content-Type": "application/json",
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-  });
-  const json = await res.json() as { error?: string } & T;
-  if (!res.ok) throw new Error(json.error ?? `Relay request failed (${res.status})`);
-  return json;
-}
+export const getRemoteApprovalOverview: typeof VIRelayClient.prototype.getRemoteApprovalOverview =
+  (...args) => makeClient().getRemoteApprovalOverview(...args);
 
-// ── Overview ──────────────────────────────────────────────────────────────────
+export const getEnrollments: typeof VIRelayClient.prototype.getEnrollments =
+  (...args) => makeClient().getEnrollments(...args);
 
-export async function getRemoteApprovalOverview(): Promise<RemoteApprovalOverview> {
-  return piGet<RemoteApprovalOverview>("/v1/vi/overview");
-}
+export const createRemoteEnrollment: typeof VIRelayClient.prototype.createRemoteEnrollment =
+  (...args) => makeClient().createRemoteEnrollment(...args);
 
-// ── Agents (dashboard-side operations only) ───────────────────────────────────
-// NOTE: registerRemoteAgent, heartbeatRemoteAgent, pollRemoteAgent, reportRemoteAgentJob
-// are daemon routes — vi-agent calls the relay directly in cloud mode.
-// The dashboard never mediates those calls. They are NOT exported from relay-cloud-client.
+export const consumeRemoteEnrollment: typeof VIRelayClient.prototype.consumeRemoteEnrollment =
+  (...args) => makeClient().consumeRemoteEnrollment(...args);
 
-// ── Enrollments ───────────────────────────────────────────────────────────────
+export const revokeRemoteEnrollment: typeof VIRelayClient.prototype.revokeRemoteEnrollment =
+  (...args) => makeClient().revokeRemoteEnrollment(...args);
 
-export async function getEnrollments() {
-  return piGet<{ enrollments: unknown[]; recentEnrollments: unknown[] }>("/v1/vi/enrollments");
-}
+export const createReconnectEnrollment: typeof VIRelayClient.prototype.createReconnectEnrollment =
+  (...args) => makeClient().createReconnectEnrollment(...args);
 
-export async function createRemoteEnrollment(input: {
-  displayName: string; projectLabel: string; toolType?: string; expiresInMinutes?: number;
-}): Promise<RemoteEnrollmentSummary & { pairCommand?: string; advancedCommand?: string; relayUrl?: string }> {
-  const result = await piPost<{
-    enrollment: RemoteEnrollmentSummary;
-    pairCommand?: string;
-    advancedCommand?: string;
-    relayUrl?: string;
-  }>("/v1/vi/enrollments", input);
-  return { ...result.enrollment, pairCommand: result.pairCommand, advancedCommand: result.advancedCommand, relayUrl: result.relayUrl };
-}
+export const createRemoteAgentJob: typeof VIRelayClient.prototype.createRemoteAgentJob =
+  (...args) => makeClient().createRemoteAgentJob(...args);
 
-export async function consumeRemoteEnrollment(input: { code: string }): Promise<{
-  enrollment: RemoteEnrollmentSummary;
-  config: {
-    displayName: string;
-    projectLabel: string;
-    toolType: string;
-    relayUrl?: string;
-    relayToken?: string;
-  };
-}> {
-  // Use the relay's no-auth alias so backward-compat pairing still works when
-  // dashboard is in cloud mode (vi-agent pair --server http://dashboard).
-  const res = await fetch(`${relayBase()}/api/remote-agents/enrollments/consume`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-    cache: "no-store",
-  });
-  const json = await res.json() as { error?: string } & { enrollment: RemoteEnrollmentSummary; config: { displayName: string; projectLabel: string; toolType: string; relayUrl?: string; relayToken?: string } };
-  if (!res.ok) throw new Error(json.error ?? `Enrollment consume failed (${res.status})`);
-  return json;
-}
+export const archiveRemoteAgentJob: typeof VIRelayClient.prototype.archiveRemoteAgentJob =
+  (...args) => makeClient().archiveRemoteAgentJob(...args);
 
-export async function revokeRemoteEnrollment(input: { enrollmentId: string }): Promise<RemoteEnrollmentSummary> {
-  const result = await piPost<{ enrollment: RemoteEnrollmentSummary }>(
-    `/v1/vi/enrollments/${encodeURIComponent(input.enrollmentId)}/revoke`,
-  );
-  return result.enrollment;
-}
+export const removeRemoteAgentJob: typeof VIRelayClient.prototype.removeRemoteAgentJob =
+  (...args) => makeClient().removeRemoteAgentJob(...args);
 
-export async function createReconnectEnrollment(agentId: string): Promise<{
-  enrollment: RemoteEnrollmentSummary; pairCommand: string; advancedCommand: string; relayUrl: string;
-}> {
-  return piPost(`/v1/vi/agents/${encodeURIComponent(agentId)}/reconnect`);
-}
+export const updateRemoteAgentJobSettings: typeof VIRelayClient.prototype.updateRemoteAgentJobSettings =
+  (...args) => makeClient().updateRemoteAgentJobSettings(...args);
 
-// ── Jobs ──────────────────────────────────────────────────────────────────────
+export const restartRemoteAgentJob: typeof VIRelayClient.prototype.restartRemoteAgentJob =
+  (...args) => makeClient().restartRemoteAgentJob(...args);
 
+export const createRemoteApprovalRequest: typeof VIRelayClient.prototype.createRemoteApprovalRequest =
+  (...args) => makeClient().createRemoteApprovalRequest(...args);
 
-export async function createRemoteAgentJob(input: {
-  agentId: string; title?: string; command: string[]; provider?: string;
-  cwd?: string; env?: Record<string, string>; model?: string | null;
-  reasoningEffort?: string | null; ralphEnabled?: boolean;
-  autoResumeUsageLimit?: boolean; autoRestartCodex?: boolean;
-}): Promise<RemoteAgentJob> {
-  const result = await piPost<{ job: RemoteAgentJob; relayDispatch: unknown }>("/v1/vi/jobs", input);
-  return result.job;
-}
+export const respondToRemoteApproval: typeof VIRelayClient.prototype.respondToRemoteApproval =
+  (...args) => makeClient().respondToRemoteApproval(...args);
 
-export async function archiveRemoteAgentJob(input: { jobId: string; agentId?: string }): Promise<RemoteAgentJob> {
-  const result = await piPost<{ job: RemoteAgentJob }>(
-    `/v1/vi/jobs/${encodeURIComponent(input.jobId)}/archive`,
-    { agentId: input.agentId },
-  );
-  return result.job;
-}
+export const dispatchRelayApprovalDecision: typeof VIRelayClient.prototype.dispatchRelayApprovalDecision =
+  (...args) => makeClient().dispatchRelayApprovalDecision(...args);
 
-export async function removeRemoteAgentJob(input: { jobId: string; agentId?: string }) {
-  return piPost<{ removed: boolean; removedJobIds: string[] }>(
-    `/v1/vi/jobs/${encodeURIComponent(input.jobId)}/delete`,
-    { agentId: input.agentId },
-  );
-}
+export const dispatchRelayJob: typeof VIRelayClient.prototype.dispatchRelayJob =
+  (...args) => makeClient().dispatchRelayJob(...args);
 
-export async function updateRemoteAgentJobSettings(input: {
-  jobId: string;
-  agentId?: string;
-  ralphEnabled?: boolean;
-  autoResumeUsageLimit?: boolean;
-  autoRestartCodex?: boolean;
-  model?: string | null;
-  reasoningEffort?: string | null;
-}): Promise<RemoteAgentJob> {
-  const { jobId, ...rest } = input;
-  const result = await viPatch<{ job: RemoteAgentJob }>(`/v1/vi/jobs/${encodeURIComponent(jobId)}`, rest);
-  return result.job;
-}
+export const removeRemoteAgent: typeof VIRelayClient.prototype.removeRemoteAgent =
+  (...args) => makeClient().removeRemoteAgent(...args);
 
-export async function restartRemoteAgentJob(input: { jobId: string; agentId?: string }): Promise<RemoteAgentJob> {
-  const result = await piPost<{ job: RemoteAgentJob; relayDispatch: unknown }>(
-    `/v1/vi/jobs/${encodeURIComponent(input.jobId)}/restart`,
-    { agentId: input.agentId },
-  );
-  return result.job;
-}
+export const requestRemoteAgentDaemonRestart: typeof VIRelayClient.prototype.requestRemoteAgentDaemonRestart =
+  (...args) => makeClient().requestRemoteAgentDaemonRestart(...args);
 
-// ── Approvals ─────────────────────────────────────────────────────────────────
-
-export async function createRemoteApprovalRequest(input: {
-  agentId: string;
-  parentJobId?: string;
-  title: string;
-  message: string;
-  riskLevel?: RemoteApprovalRequest["riskLevel"];
-  command?: string;
-  actionKind?: RemoteApprovalRequest["actionKind"];
-  suggestedCommand?: string;
-  helperPrompt?: string;
-  eventType?: RemoteApprovalRequest["eventType"];
-  primaryAction?: RemoteApprovalRequest["primaryAction"];
-}): Promise<RemoteApprovalRequest> {
-  const result = await piPost<{ approvalRequest: RemoteApprovalRequest }>("/v1/vi/approvals", input);
-  return result.approvalRequest;
-}
-
-export async function respondToRemoteApproval(input: {
-  requestId: string; action: "approve" | "reject"; response?: string;
-}): Promise<RemoteApprovalRequest> {
-  const result = await piPost<{ approvalRequest: RemoteApprovalRequest; relayDispatch: unknown }>(
-    `/v1/vi/approvals/${encodeURIComponent(input.requestId)}/respond`,
-    { action: input.action, response: input.response },
-  );
-  return result.approvalRequest;
-}
-
-export async function dispatchRelayApprovalDecision(agentId: string, request: unknown) {
-  return piPost<{ delivered: boolean; targetPeerId: string }>(
-    "/v1/vi/approval-decisions",
-    { agentId, request },
-  );
-}
-
-export async function dispatchRelayJob(agentId: string, job: unknown) {
-  return piPost<{ delivered: boolean; targetPeerId: string }>(
-    "/v1/vi/jobs/dispatch",
-    { agentId, job },
-  );
-}
-
-// ── Agents ────────────────────────────────────────────────────────────────────
-
-export async function removeRemoteAgent(input: { agentId: string }) {
-  return piPost<{ removed: boolean }>(
-    `/v1/vi/agents/${encodeURIComponent(input.agentId)}/remove`,
-  );
-}
-
-export async function requestRemoteAgentDaemonRestart(agentId: string) {
-  return piPost<{ command: unknown }>(
-    `/v1/vi/agents/${encodeURIComponent(agentId)}/restart-daemon`,
-  );
-}
-
-export async function setRemoteAgentPolicy(input: {
-  agentId: string;
-  mode?: "manual" | "timeout_allow" | "always_allow";
-  cycle?: boolean;
-  timeoutSeconds?: number;
-}) {
-  const { cycle: _cycle, ...rest } = input;
-  return piPost<{ agent: unknown }>(
-    `/v1/vi/agents/${encodeURIComponent(input.agentId)}/policy`,
-    rest,
-  ).then((r) => r.agent);
-}
+export const setRemoteAgentPolicy: typeof VIRelayClient.prototype.setRemoteAgentPolicy =
+  (...args) => makeClient().setRemoteAgentPolicy(...args);

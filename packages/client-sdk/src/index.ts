@@ -1,0 +1,25 @@
+export { VIRelayClient } from "./relay-client.js";
+export type { VIRelayClientConfig } from "./relay-client.js";
+export type {
+  VIApprovalPermissionMode,
+  VIApprovalRiskLevel,
+  VIApprovalEventType,
+  VIApprovalPrimaryAction,
+  PIExternalActionKind,
+  RemoteAgentStatus,
+  RemoteAgentConnectionState,
+  RemoteRelayState,
+  RemoteEnrollmentSummary,
+  RemoteAuthConnectorStatus,
+  RemoteAuthConnectorSummary,
+  RemoteAgentSessionHistoryItem,
+  RemoteAgentSummary,
+  RemoteApprovalRequest,
+  RemoteProviderStateName,
+  RemoteProviderState,
+  RemoteAgentJobInput,
+  RemoteAgentJob,
+  RemoteAgentEventType,
+  RemoteAgentEvent,
+  RemoteApprovalOverview,
+} from "./types.js";

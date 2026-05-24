@@ -6,9 +6,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "pnpm --filter @vi/core build && pnpm --filter @vi/relay build && pnpm --filter @vi/web build",
+    "build": "pnpm --filter @vi/core build && pnpm --filter @vi/client-sdk build && pnpm --filter @vi/relay build && pnpm --filter @vi/web build",
     "dev": "pnpm --filter @vi/web dev",
-    "typecheck": "pnpm --filter @vi/core typecheck && pnpm --filter @vi/web typecheck"
+    "typecheck": "pnpm --filter @vi/core typecheck && pnpm --filter @vi/client-sdk typecheck && pnpm --filter @vi/web typecheck"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["better-sqlite3", "esbuild", "node-pty", "sharp"]
