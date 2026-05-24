@@ -86,7 +86,7 @@ function ProjectSidebarInner({
   const sessionsByProject = useMemo(() => {
     const map = new Map<string, DashboardSession[]>();
     for (const s of sessions) {
-      // PI: no orchestrator sessions
+      // VI: no orchestrator sessions
       const list = map.get(s.projectId) ?? [];
       list.push(s);
       map.set(s.projectId, list);
@@ -147,7 +147,7 @@ function ProjectSidebarInner({
               pathname === "/agents" && "project-sidebar__sess-row--active",
             )}
             aria-current={pathname === "/agents" ? "page" : undefined}
-            aria-label="Open PI agents connector"
+            aria-label="Open VI agents connector"
           >
             <SessionDot level="working" />
             <span
@@ -168,7 +168,7 @@ function ProjectSidebarInner({
               pathname === "/ideas" && "project-sidebar__sess-row--active",
             )}
             aria-current={pathname === "/ideas" ? "page" : undefined}
-            aria-label="Open PI ideas"
+            aria-label="Open VI ideas"
           >
             <SessionDot level="pending" />
             <span

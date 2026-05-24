@@ -10,7 +10,7 @@ import {
 } from "@vi/core";
 import type { VIIdeaBoardColumnData, VIIdeaBoardData, VIIdeaCard, VIIdeaStatus } from "@/lib/types";
 import { getServices } from "@/lib/services";
-import type { PIConfig } from "@/lib/services";
+import type { VIConfig } from "@/lib/services";
 
 // Alias for compatibility with original code that uses TERMINAL_STATUSES
 const TERMINAL_STATUSES = VI_TERMINAL_STATUSES;
@@ -44,12 +44,12 @@ const IDEA_COLUMNS: Array<{ id: VIIdeaStatus; title: string; description: string
   {
     id: "project_queue",
     title: "Project Queue",
-    description: "Queued ideas ready to be picked up by PI next.",
+    description: "Queued ideas ready to be picked up by VI next.",
   },
   {
     id: "working",
     title: "Working",
-    description: "Ideas PI is actively implementing right now.",
+    description: "Ideas VI is actively implementing right now.",
   },
   {
     id: "done",
@@ -221,13 +221,13 @@ function buildIdeaPrompt(idea: Pick<VIIdeaRecord, "id" | "title" | "markdown">):
     `[VI_IDEA_TITLE:${idea.title}]`,
     `[VI_PROJECT_NAME:${workspace.projectName}]`,
     "",
-    "Implement the following idea from the PI idea factory.",
+    "Implement the following idea from the VI idea factory.",
     "",
     `Project name: ${workspace.projectName}`,
     `Workspace folder: ${workspace.workspacePath}`,
     "Treat this workspace folder as the project root for the implementation.",
     "If the folder is empty, initialize the project there and continue working inside it.",
-    "Do not drift back to the PI control-plane repo unless the idea explicitly asks you to change PI itself.",
+    "Do not drift back to the VI control-plane repo unless the idea explicitly asks you to change VI itself.",
     "",
     idea.markdown,
   ].join("\n");
@@ -244,14 +244,14 @@ function buildApprovalInstruction(sessionId: string, workspacePath: string): str
 
   return [
     "VI approval channel is available for this session.",
-    "Before you implement anything, inspect the task and immediately POST a concrete `plan_approval` request to the local PI endpoint.",
+    "Before you implement anything, inspect the task and immediately POST a concrete `plan_approval` request to the local VI endpoint.",
     "That request must summarize:",
     "- what you are going to build first",
     `- which folder/files under ${workspacePath} you expect to create or edit`,
     "- any important assumptions or risks",
     "- how you plan to verify the first pass",
     "",
-    "After you POST the approval request, stop and wait. Do not begin implementation until PI sends an approval or a follow-up reply.",
+    "After you POST the approval request, stop and wait. Do not begin implementation until VI sends an approval or a follow-up reply.",
     "",
     "Endpoint:",
     "http://127.0.0.1:3000/api/vi/requests/create",
@@ -335,7 +335,7 @@ async function spawnIdeaSession(
 }
 
 async function _ensureIdeaExecution(
-  config: PIConfig,
+  config: VIConfig,
   projectId: string,
   store: VIIdeaStore,
 ): Promise<VIIdeaStore> {
@@ -411,13 +411,13 @@ function toBoard(projectId: string, store: VIIdeaStore): VIIdeaBoardData {
   };
 }
 
-async function resolveProjectConfig(config: PIConfig, projectId: string) {
+async function resolveProjectConfig(config: VIConfig, projectId: string) {
   const project = config.projects[projectId];
   if (!project) {
     throw new Error(`Unknown project: ${projectId}`);
   }
   if (!config.configPath) {
-    throw new Error("PI config path is not available");
+    throw new Error("VI config path is not available");
   }
   return {
     configPath: config.configPath,
@@ -430,7 +430,7 @@ export async function resolveVIIdeaProjectId(projectId?: string | null): Promise
   if (projectId && config.projects[projectId]) return projectId;
   const firstProjectId = Object.keys(config.projects)[0];
   if (!firstProjectId) {
-    throw new Error("No PI execution project is configured");
+    throw new Error("No VI execution project is configured");
   }
   return firstProjectId;
 }

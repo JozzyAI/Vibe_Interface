@@ -140,13 +140,13 @@ function SessionRuntimeStatus({ session }: { session: DashboardSession }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-accent-green)]">
-            PI Runtime
+            VI Runtime
           </p>
           <h2 className="mt-1 text-[18px] font-semibold text-[var(--color-text-primary)]">
             Session process is alive
           </h2>
           <p className="mt-2 text-[13px] leading-7 text-[var(--color-text-secondary)]">
-            PI can see this session and its tmux runtime. If the black terminal stays on
+            VI can see this session and its tmux runtime. If the black terminal stays on
             `CONNECTING...`, that is the browser streaming layer, not proof that the agent failed
             to start.
           </p>
@@ -221,7 +221,7 @@ function SessionAutomationControls({
     setIsSaving("ralph");
     try {
       await sendControlMessage(
-        "PI control update: Ralph loop is now enabled for this session. Keep making forward progress autonomously. When one step is complete, choose the next useful step, continue until blocked, and ask PI for approval only when needed.",
+        "VI control update: Ralph loop is now enabled for this session. Keep making forward progress autonomously. When one step is complete, choose the next useful step, continue until blocked, and ask VI for approval only when needed.",
       );
       setMessage("Ralph loop enabled and sent to the agent.");
     } catch (error) {
@@ -240,7 +240,7 @@ function SessionAutomationControls({
     setIsSaving("usage");
     try {
       await sendControlMessage(
-        "PI control update: usage-limit auto resume is now enabled for this session. If you hit a provider usage limit, stop safely, summarize the exact retry time or error text, and wait for PI to resume you later.",
+        "VI control update: usage-limit auto resume is now enabled for this session. If you hit a provider usage limit, stop safely, summarize the exact retry time or error text, and wait for VI to resume you later.",
       );
       setMessage("Usage-limit recovery instruction sent to the agent.");
     } catch (error) {
@@ -305,7 +305,7 @@ function SessionAutomationControls({
             {autoResumeUsageLimit ? "Usage-limit auto resume enabled" : "Enable auto resume after usage limit"}
           </span>
           <span className="mt-1 block text-[12px] leading-5 text-[var(--color-text-secondary)]">
-            Ask the agent to pause cleanly and leave PI a retry point after usage limits.
+            Ask the agent to pause cleanly and leave VI a retry point after usage limits.
           </span>
         </button>
       </div>

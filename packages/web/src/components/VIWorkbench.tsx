@@ -51,7 +51,7 @@ function titleFromPrompt(prompt: string): string {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find(Boolean);
-  return (firstLine ?? "Untitled PI task").slice(0, 96);
+  return (firstLine ?? "Untitled VI task").slice(0, 96);
 }
 
 function safeFolderName(title: string): string {
@@ -221,7 +221,7 @@ export function VIWorkbench({
               cwd: workspace,
               title,
               prompt: [
-                "Implement this PI task as a dedicated project.",
+                "Implement this VI task as a dedicated project.",
                 `Workspace folder: ${workspace}`,
                 "",
                 "Use VI approval flow for risky operations. Keep work inside this folder.",
@@ -296,7 +296,7 @@ export function VIWorkbench({
           href="/"
           className="mb-4 grid h-12 w-12 place-items-center rounded-2xl border border-[#9ed9e5] bg-[#0b8ea6] text-[13px] font-bold text-white shadow-sm hover:no-underline"
         >
-          PI
+          VI
         </a>
         <nav className="flex flex-1 flex-col items-center gap-2">
           <RailLink href="/" label="Home" active>
@@ -319,7 +319,7 @@ export function VIWorkbench({
         <div className="flex h-16 items-center gap-3 border-b border-[#ececea] px-4">
           <Link href="/" className="text-[22px] text-[#7b808a] hover:no-underline">‹</Link>
           <div className="grid h-8 w-8 place-items-center rounded-lg bg-[#0b8ea6] text-[11px] font-bold text-white">
-            PI
+            VI
           </div>
           <div className="min-w-0">
             <p className="truncate text-[15px] font-semibold">{projectName ?? "Vibe Interface"}</p>

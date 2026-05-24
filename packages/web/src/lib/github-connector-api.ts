@@ -6,9 +6,9 @@ import {
   type CreateIssueInput,
   type VIGitHubConnectorRecord,
 } from "@vi/core";
-import type { PIConfig, VIProjectConfig } from "@/lib/services";
+import type { VIConfig, VIProjectConfig } from "@/lib/services";
 
-// PI-owned definitions for GitHub issue types
+// VI-owned definitions for GitHub issue types
 export interface Issue {
   id: string;
   title: string;
@@ -34,7 +34,7 @@ export interface IssueUpdate {
   comment?: string;
 }
 
-// In PI, all projects use GitHub connectors — tracker/scm plugin not needed
+// In VI, all projects use GitHub connectors — tracker/scm plugin not needed
 function isGitHubProject(_project: VIProjectConfig): boolean {
   return true;
 }
@@ -50,7 +50,7 @@ function getConnectorRepo(project: VIProjectConfig, connector: VIGitHubConnector
 }
 
 async function getSelectedConnector(
-  config: PIConfig,
+  config: VIConfig,
   project: VIProjectConfig,
 ): Promise<VIGitHubConnectorRecord | null> {
   if (!config.configPath || !isGitHubProject(project)) return null;
@@ -120,7 +120,7 @@ function mapGitHubIssue(
 }
 
 export async function getSelectedGitHubConnectorForProject(
-  config: PIConfig,
+  config: VIConfig,
   projectId: string,
 ): Promise<VIGitHubConnectorRecord | null> {
   const project = config.projects[projectId];
@@ -129,7 +129,7 @@ export async function getSelectedGitHubConnectorForProject(
 }
 
 export async function createIssueViaGitHubConnector(
-  config: PIConfig,
+  config: VIConfig,
   projectId: string,
   input: CreateIssueInput,
 ): Promise<Issue | null> {
@@ -167,7 +167,7 @@ export async function createIssueViaGitHubConnector(
 }
 
 export async function listIssuesViaGitHubConnector(
-  config: PIConfig,
+  config: VIConfig,
   projectId: string,
   filters: IssueFilters,
 ): Promise<Issue[] | null> {
@@ -202,7 +202,7 @@ export async function listIssuesViaGitHubConnector(
 }
 
 export async function updateIssueViaGitHubConnector(
-  config: PIConfig,
+  config: VIConfig,
   projectId: string,
   identifier: string,
   update: IssueUpdate,
@@ -270,7 +270,7 @@ export async function updateIssueViaGitHubConnector(
 }
 
 export async function createRepositoryViaGitHubConnector(
-  config: PIConfig,
+  config: VIConfig,
   projectId: string,
   input: {
     owner?: string;

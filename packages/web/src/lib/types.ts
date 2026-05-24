@@ -1,9 +1,9 @@
 /**
- * Dashboard-specific types for the PI web UI.
- * All types are PI-owned — no external agent framework dependency.
+ * Dashboard-specific types for the VI web UI.
+ * All types are VI-owned — no external agent framework dependency.
  */
 
-// Re-export PI core types used throughout the dashboard
+// Re-export VI core types used throughout the dashboard
 export type {
   VISession,
   VISessionState,
@@ -88,7 +88,7 @@ export interface DashboardSession {
 }
 
 // ---------------------------------------------------------------------------
-// PI inbox / control plane types
+// VI inbox / control plane types
 // ---------------------------------------------------------------------------
 
 export interface VIInboxItem {

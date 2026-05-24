@@ -17,7 +17,7 @@ export async function generateMetadata(props: {
   const project = getAllProjects().find((entry: { id: string; name?: string }) => entry.id === projectId);
   return {
     title: {
-      absolute: `PI | ${project?.name ?? projectId ?? "Drafts"} - Drafts`,
+      absolute: `VI | ${project?.name ?? projectId ?? "Drafts"} - Drafts`,
     },
   };
 }

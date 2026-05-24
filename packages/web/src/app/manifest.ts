@@ -4,8 +4,8 @@ import { getProjectName } from "@/lib/project-name";
 export default function manifest(): MetadataRoute.Manifest {
   const projectName = getProjectName();
   return {
-    name: `PI | ${projectName}`,
-    short_name: "PI",
+    name: `VI | ${projectName}`,
+    short_name: "VI",
     description: "Dashboard for managing parallel AI coding agents",
     start_url: "/",
     display: "standalone",

@@ -17,7 +17,7 @@ export async function generateMetadata(props: {
   await props.searchParams;
   return {
     title: {
-      absolute: "PI | All Projects - Approval Hub",
+      absolute: "VI | All Projects - Approval Hub",
     },
   };
 }

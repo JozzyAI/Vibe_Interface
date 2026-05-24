@@ -249,10 +249,10 @@ function detectNumberedCliChoice(lines: string[]): {
         ? "Codex update prompt"
         : "CLI is waiting for a choice",
     message: isRateLimitModelChoice
-      ? "Codex is asking whether to switch models before continuing. Choose one option and PI will send it to the remote CLI."
+      ? "Codex is asking whether to switch models before continuing. Choose one option and VI will send it to the remote CLI."
       : isUpdatePrompt
-        ? "Codex is asking whether to update before continuing. Choose one option and PI will send it to the remote CLI."
-        : "The remote CLI is paused at a numbered choice. Choose one option and PI will send it to the remote CLI.",
+        ? "Codex is asking whether to update before continuing. Choose one option and VI will send it to the remote CLI."
+        : "The remote CLI is paused at a numbered choice. Choose one option and VI will send it to the remote CLI.",
     actions: uniqueOptions.map((option, index) => {
       const lower = option.label.toLowerCase();
       return {
@@ -300,7 +300,7 @@ function detectCliApproval(logTail: string | undefined): {
   ) {
     return {
       title: "Codex update prompt",
-      message: "Codex is asking whether to update before continuing. Choose one option and PI will send it to the remote CLI.",
+      message: "Codex is asking whether to update before continuing. Choose one option and VI will send it to the remote CLI.",
       actions: [
         { label: "Update now", input: "1", tone: "primary" },
         { label: "Skip", input: "2", tone: "secondary" },
@@ -605,7 +605,7 @@ export function VIRemoteSessionDetail({ jobId, initialOverview }: Props) {
   const removeSession = async () => {
     if (!job) return;
     const confirmed = window.confirm(
-      "Remove this session from PI? This clears the session record and related PI requests. Logs may still exist on the machine.",
+      "Remove this session from VI? This clears the session record and related VI requests. Logs may still exist on the machine.",
     );
     if (!confirmed) return;
     setIsRemoving(true);
@@ -808,7 +808,7 @@ export function VIRemoteSessionDetail({ jobId, initialOverview }: Props) {
               {job.autoResumeUsageLimit ? "Usage-limit auto resume enabled" : "Enable auto resume after usage limit"}
             </span>
             <span className="mt-1 block text-[12px] leading-5 text-[var(--color-text-secondary)]">
-              If Codex reports a usage limit, PI queues a follow-up run for the retry window.
+              If Codex reports a usage limit, VI queues a follow-up run for the retry window.
             </span>
           </button>
 
@@ -830,7 +830,7 @@ export function VIRemoteSessionDetail({ jobId, initialOverview }: Props) {
                 {job.autoRestartCodex ? "Codex auto restart enabled" : "Enable Codex auto restart"}
               </span>
               <span className="mt-1 block text-[12px] leading-5 text-[var(--color-text-secondary)]">
-                If Codex says restart is required, PI starts a fresh process and resumes the session.
+                If Codex says restart is required, VI starts a fresh process and resumes the session.
               </span>
             </button>
           ) : null}
@@ -840,8 +840,8 @@ export function VIRemoteSessionDetail({ jobId, initialOverview }: Props) {
           <div className="mt-4 rounded-2xl border border-[var(--color-status-attention)]/40 bg-[var(--color-status-attention-soft)] p-3 text-[13px] leading-6 text-[var(--color-text-secondary)]">
             Usage limit detected in this session.{" "}
             {job.autoResumeUsageLimit
-              ? "Auto-resume is enabled, so PI will schedule a follow-up run."
-              : "Turn on auto-resume if you want PI to retry automatically later."}
+              ? "Auto-resume is enabled, so VI will schedule a follow-up run."
+              : "Turn on auto-resume if you want VI to retry automatically later."}
           </div>
         ) : null}
 
@@ -877,7 +877,7 @@ export function VIRemoteSessionDetail({ jobId, initialOverview }: Props) {
                   This terminal is degraded, not truly healthy.
                 </p>
                 <p className="mt-1">
-                  PI detected provider heartbeat failures in the live log, so text may be delivered to tmux while the
+                  VI detected provider heartbeat failures in the live log, so text may be delivered to tmux while the
                   actual Codex agent loop is no longer connected. Restarting will resume the nearest saved Codex session
                   in a fresh process.
                 </p>
@@ -925,9 +925,9 @@ export function VIRemoteSessionDetail({ jobId, initialOverview }: Props) {
             {job.status !== "running"
               ? `The job is ${job.status}, so its terminal process has ended.`
               : codexRestartRequired
-                ? "Codex asked for a restart, so PI is blocking manual input to avoid sending text into a stale process."
+                ? "Codex asked for a restart, so VI is blocking manual input to avoid sending text into a stale process."
                 : providerHeartbeatFailed
-                  ? "The provider heartbeat is failing, so PI is blocking input instead of pretending the agent is connected."
+                  ? "The provider heartbeat is failing, so VI is blocking input instead of pretending the agent is connected."
                   : `The machine is ${agent.connectionState}.`}
             {" "}Open a running session from the sidebar, or start a new session.
           </div>
@@ -960,7 +960,7 @@ export function VIRemoteSessionDetail({ jobId, initialOverview }: Props) {
                 Utility session
               </p>
               <h2 className="mt-1 text-[16px] font-semibold text-[#1e2026]">
-                PI created a helper session
+                VI created a helper session
               </h2>
             </div>
             <span className="rounded-full border border-[#cfd3ff] bg-white px-3 py-1 text-[12px] font-semibold text-[#5964d8]">
@@ -1372,7 +1372,7 @@ export function VIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
   const removeSession = async () => {
     if (!job) return;
     const confirmed = window.confirm(
-      "Remove this session from PI? This clears the session record and related PI requests. Logs may still exist on the machine.",
+      "Remove this session from VI? This clears the session record and related VI requests. Logs may still exist on the machine.",
     );
     if (!confirmed) return;
     setIsRemoving(true);

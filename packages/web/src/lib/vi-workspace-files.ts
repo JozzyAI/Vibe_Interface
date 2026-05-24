@@ -15,6 +15,6 @@ export async function readVIWorkspaceFiles(root: string): Promise<string[]> {
       .slice(0, 28)
       .map((entry) => entry.name);
   } catch {
-    return ["PI", "README.md"];
+    return ["VI", "README.md"];
   }
 }

@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     title,
     message,
     status: shouldAutoApprove ? "approved" : "open",
-    response: shouldAutoApprove ? `Auto-approved by PI policy (${policy.mode})` : undefined,
+    response: shouldAutoApprove ? `Auto-approved by VI policy (${policy.mode})` : undefined,
   });
 
   await appendVIApprovalAuditEvent(config.configPath, project.path, {

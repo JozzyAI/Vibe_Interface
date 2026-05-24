@@ -28,7 +28,7 @@ export function getProjectScopedHref(
   return projectId ? `${basePath}?project=${encodeURIComponent(projectId)}` : `${basePath}?project=all`;
 }
 
-// In PI there is no orchestrator meta-session — every session in the store is a worker session.
+// In VI there is no orchestrator meta-session — every session in the store is a worker session.
 export function filterWorkerSessions<T extends SessionLike>(
   sessions: T[],
   projectFilter: string | null | undefined,

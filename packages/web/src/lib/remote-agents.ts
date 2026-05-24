@@ -458,7 +458,7 @@ function buildCodexFreshCommand(
 function ralphTaskSeed(job: RemoteAgentJob): string {
   const envTitle = job.env?.VI_SESSION_TITLE?.trim();
   if (envTitle) return envTitle;
-  return job.title.replace(/\s+\(ralph iteration \d+\)$/i, "").trim() || "PI task";
+  return job.title.replace(/\s+\(ralph iteration \d+\)$/i, "").trim() || "VI task";
 }
 
 function containsRalphComplete(text: string | undefined): boolean {
@@ -469,7 +469,7 @@ function containsRalphComplete(text: string | undefined): boolean {
 function buildRalphIterationPrompt(job: RemoteAgentJob, iteration: number): string {
   const taskTitle = ralphTaskSeed(job);
   return [
-    `PI True Ralph mode iteration ${iteration} for: ${taskTitle}`,
+    `VI True Ralph mode iteration ${iteration} for: ${taskTitle}`,
     "",
     "Run one bounded autonomous iteration, then exit.",
     "",
@@ -973,7 +973,7 @@ export async function updateRemoteAgentDetails(input: {
   return agent;
 }
 
-/** Mark an agent as user-disabled. PI stops dispatching jobs; the agent is kept in the store. */
+/** Mark an agent as user-disabled. VI stops dispatching jobs; the agent is kept in the store. */
 export async function disableRemoteAgent(agentId: string): Promise<RemoteAgentRecord> {
   const store = await readStore();
   const agent = store.agents.find((entry) => entry.agentId === agentId);
@@ -1014,7 +1014,7 @@ export async function requestRemoteAgentDaemonRestart(agentId: string): Promise<
     createdAt: now,
     severity: "attention",
     metadata: {
-      source: "pi-dashboard",
+      source: "vi-dashboard",
       commandId: command.commandId,
     },
   });
@@ -1849,7 +1849,7 @@ function buildHandoffContinuationPrompt(job: RemoteAgentJob, sourceAgent: Remote
   const notes = job.handoff?.notes?.trim() || "No NOTES.md content was reported.";
   const recentOutput = (job.logTail ?? "").trim().slice(-8_000) || "No recent terminal output was reported.";
   return [
-    "Continue this PI coding session from a cross-machine handoff.",
+    "Continue this VI coding session from a cross-machine handoff.",
     "",
     "You are not resuming the original terminal process. Treat this as a clean continuation on this machine.",
     "Use the handoff files as the durable source of truth, then inspect the workspace before editing.",
@@ -1863,7 +1863,7 @@ function buildHandoffContinuationPrompt(job: RemoteAgentJob, sourceAgent: Remote
     "Rules:",
     "- First read the local workspace state and confirm what exists on this machine.",
     "- Continue from the next actionable item in TODO.md.",
-    "- If the local machine is missing files, credentials, remotes, or dependencies, ask PI through the external-action hook instead of guessing.",
+    "- If the local machine is missing files, credentials, remotes, or dependencies, ask VI through the external-action hook instead of guessing.",
     "- Keep PROGRESS.md, TODO.md, and NOTES.md updated through the VI_*_FILE environment variables.",
     "- When blocked or complete, update the handoff files before stopping.",
     "",
@@ -2294,7 +2294,7 @@ export async function exportRemoteAgentJob(input: {
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
   const content = [
-    `# PI Session Export: ${deriveHandoffTitle(job) || job.title}`,
+    `# VI Session Export: ${deriveHandoffTitle(job) || job.title}`,
     "",
     "## Metadata",
     "",
@@ -2308,7 +2308,7 @@ export async function exportRemoteAgentJob(input: {
     "",
     "## Resume Hint",
     "",
-    "Use this bundle as the first prompt/context when resuming the session in PI.",
+    "Use this bundle as the first prompt/context when resuming the session in VI.",
     "",
     "---",
     "",

@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     return jsonWithCorrelation(data, { status: 200 }, correlationId);
   } catch (error) {
     return jsonWithCorrelation(
-      { error: error instanceof Error ? error.message : "Failed to load PI control plane" },
+      { error: error instanceof Error ? error.message : "Failed to load VI control plane" },
       { status: 500 },
       correlationId,
     );

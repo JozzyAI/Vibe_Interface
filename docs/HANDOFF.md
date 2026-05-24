@@ -108,7 +108,7 @@ All DB read/write operations. Key functions:
 ### packages/relay/src/server.ts
 HTTP + WebSocket server. Routes:
 - `/v1/daemon/*` — vi-agent calls (daemon token auth). Writes relay DB directly.
-- `/v1/vi/*` — dashboard calls (pi token auth). Reads/writes relay DB.
+- `/v1/vi/*` — dashboard calls (vi token auth). Reads/writes relay DB.
 - `/api/remote-agents/enrollments/consume` — no-auth compat alias for backward-compatible `vi-agent pair`
 - `/ws` — general relay WebSocket (job dispatch, approval decisions, presence)
 - `/vi-agent-relay` — terminal relay WebSocket (proxies between vi-agent and dashboard)
@@ -167,7 +167,7 @@ Claude Code / Codex process
 - **Agent online:** status `running`, visible in dashboard overview from relay
 - **Claude session:** job dispatched via relay (`relayDispatch.delivered: true`), vi-agent starts tmux session
 - **Browser terminal echo:** `/mux` WebSocket → `RelayTerminalSubscriber` → Fly relay → vi-agent → tmux → back; `echo hello` received through full chain
-- **Token rotation:** old daemon/pi tokens replaced without code changes; existing agents must re-pair after rotation
+- **Token rotation:** old daemon/vi tokens replaced without code changes; existing agents must re-pair after rotation
 - **Local mode:** overview, heartbeat, poll, job creation, approval flow all work end-to-end (unchanged)
 - **vi-agent pairing compat:** `POST /api/remote-agents/enrollments/consume` no-auth alias confirmed working on relay
 - **Provider-agnostic machines:** `tool_type` is nullable on agents, never used for routing; `provider` lives on jobs
@@ -202,7 +202,7 @@ Claude Code / Codex process
 |----------|----------|-------------|
 | `VI_ACCESS_TOKEN` | Optional | Dashboard auth token. If unset, auth is disabled (dev mode). |
 | `VI_RELAY_BASE_URL` | Cloud mode | Relay HTTP base URL, e.g. `https://vi-relay.fly.dev`. Activates cloud mode when set with `VI_RELAY_VI_TOKEN`. |
-| `VI_RELAY_VI_TOKEN` | Cloud mode | Bearer token for dashboard → relay `/v1/vi/*` calls. Must match a `kind=pi` token in relay's `VI_RELAY_TOKENS`. |
+| `VI_RELAY_VI_TOKEN` | Cloud mode | Bearer token for dashboard → relay `/v1/vi/*` calls. Must match a `kind=vi` token in relay's `VI_RELAY_TOKENS`. |
 | `VI_RELAY_DAEMON_TOKEN` | Cloud mode | Daemon token embedded in generated pairing commands. Must match a `kind=daemon` token in relay's `VI_RELAY_TOKENS`. |
 | `VI_RELAY_PUBLIC_WS_URL` | Cloud mode | Public WS URL baked into enrollment codes, e.g. `wss://vi-relay.fly.dev`. Used to generate terminal relay URL for pair commands. |
 | `VI_CLAUDE_DEFAULT_MODEL` | Optional | Default Claude model for new sessions, e.g. `claude-sonnet-4-5`. Overrides built-in default. Never rely on shell aliases. |
@@ -213,7 +213,7 @@ Claude Code / Codex process
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `VI_RELAY_TOKENS` | Yes | Comma-separated auth tokens: `token:kind:label`, e.g. `daemon-abc:daemon,pi-xyz:pi`. |
+| `VI_RELAY_TOKENS` | Yes | Comma-separated auth tokens: `token:kind:label`, e.g. `daemon-abc:daemon,vi-xyz:vi`. |
 | `VI_RELAY_OWNER_TOKEN` | Yes | Bearer token for default owner row bootstrap. Used to authenticate the dashboard's `/v1/vi/*` calls at the relay level. |
 | `VI_RELAY_DB_PATH` | Optional | SQLite file path (default `./vi-relay.db`). On Fly.io: `/data/vi-relay.db`. |
 | `VI_RELAY_PORT` | Optional | HTTP listen port (default `8787`). |
@@ -249,9 +249,9 @@ npx pnpm run build  # or: /path/to/tsc -p tsconfig.json
 
 # Run with test tokens
 VI_RELAY_PORT=8788 \
-VI_RELAY_TOKENS="daemon-test:daemon,pi-test:pi" \
-VI_RELAY_OWNER_TOKEN="pi-test" \
-VI_RELAY_DB_PATH=/tmp/pi-test.db \
+VI_RELAY_TOKENS="daemon-test:daemon,vi-test:vi" \
+VI_RELAY_OWNER_TOKEN="vi-test" \
+VI_RELAY_DB_PATH=/tmp/vi-test.db \
 node dist/index.js
 ```
 
@@ -259,7 +259,7 @@ node dist/index.js
 ```bash
 # packages/web/.env.local
 VI_RELAY_BASE_URL=http://localhost:8788
-VI_RELAY_VI_TOKEN=pi-test
+VI_RELAY_VI_TOKEN=vi-test
 VI_RELAY_DAEMON_TOKEN=daemon-test
 ```
 
@@ -299,7 +299,7 @@ curl -s http://localhost:14801/health
 ```bash
 RELAY=http://localhost:8788
 DAEMON_TOKEN=daemon-test
-VI_TOKEN=pi-test
+VI_TOKEN=vi-test
 
 # Health
 curl -s $RELAY/health
@@ -373,7 +373,7 @@ If selection disappears on mouseup: check that `tmux set-option mouse off` is ap
 |---------|-----|
 | **Do not commit `.env.local`** | Contains live relay tokens. It is gitignored — keep it that way. Never stage or force-add it. |
 | **Do not print, paste, or log relay tokens** | Tokens in chat, terminal output, logs, or git diffs are considered exposed and must be rotated immediately. |
-| **Do not use placeholder/example tokens in production** | Tokens like `daemon-abc123` or `pi-xyz789` are public in docs — anyone can try them. Always generate with `openssl rand -hex 32`. |
+| **Do not use placeholder/example tokens in production** | Tokens like `daemon-abc123` or `vi-xyz789` are public in docs — anyone can try them. Always generate with `openssl rand -hex 32`. |
 | **After rotating tokens, re-pair all vi-agents** | The daemon token is stored in the vi-agent state file at pairing time. Old agents will receive 401 on heartbeat after rotation. They are not auto-updated. |
 | **Do not deploy relay without a persistent volume on Fly.io** | Fly's filesystem is ephemeral. The SQLite DB is wiped on every deploy without a mounted volume. Always create `vi_relay_data` before first deploy. Run `fly volumes list` to confirm before deploying. |
 | **Do not make the relay call back to a local LAN dashboard URL** | `VI_RELAY_VI_BASE_URL` was the old anti-pattern and has been removed. Relay owns DB state in cloud mode. |

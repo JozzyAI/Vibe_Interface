@@ -619,7 +619,7 @@ function _MachineAuthConnectors({
       </button>
       {github?.status === "disconnected" || github?.status === "missing" ? (
         <p className="mt-3 text-[11px] leading-5 text-[var(--color-text-tertiary)]">
-          GitHub credentials stay on this machine. PI only reads the status; agents can use `gh` after you log in locally.
+          GitHub credentials stay on this machine. VI only reads the status; agents can use `gh` after you log in locally.
         </p>
       ) : null}
     </div>
@@ -1044,11 +1044,11 @@ function MachineRow({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-[12px] font-semibold text-[var(--color-text-primary)]">
-                {agent.connectionState === "disabled" ? "Machine paused in PI" : "This machine is offline"}
+                {agent.connectionState === "disabled" ? "Machine paused in VI" : "This machine is offline"}
               </p>
               <p className="mt-1 text-[12px] leading-5 text-[var(--color-text-secondary)]">
                 {agent.connectionState === "disabled"
-                  ? "PI will not dispatch new jobs. The daemon on the machine will stop automatically on its next heartbeat. Use Reconnect to re-pair."
+                  ? "VI will not dispatch new jobs. The daemon on the machine will stop automatically on its next heartbeat. Use Reconnect to re-pair."
                   : "Queued jobs and Resume will wait here until the bridge daemon reconnects on that machine."}
               </p>
             </div>
@@ -1088,7 +1088,7 @@ function MachineRow({
                 Active remote sessions
               </p>
               <p className="mt-1 text-[12px] text-[var(--color-text-secondary)]">
-                Work started from PI on this connected machine.
+                Work started from VI on this connected machine.
               </p>
             </div>
             <span className="rounded-full border border-[var(--color-border-default)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-text-secondary)]">
@@ -1335,7 +1335,7 @@ function MachineRow({
               type="button"
               disabled={isPending}
               onClick={disconnectMachine}
-              title="Stops PI from dispatching new jobs. The daemon on the machine will exit on its next heartbeat."
+              title="Stops VI from dispatching new jobs. The daemon on the machine will exit on its next heartbeat."
               className="rounded-full border border-[var(--color-border-default)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:border-[var(--color-status-attention)] hover:text-[var(--color-status-attention)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Pause
@@ -1418,7 +1418,7 @@ function MachineRow({
             <p className="mt-1 text-[11px] leading-5 text-[var(--color-text-secondary)]">
               {jobs.length > 0
                 ? `This will remove the machine and archive its ${jobs.length} session${jobs.length === 1 ? "" : "s"}.`
-                : "This will remove the machine from PI."}
+                : "This will remove the machine from VI."}
               {" "}The bridge daemon will stop on its next heartbeat.
             </p>
             <div className="mt-2.5 flex gap-2">

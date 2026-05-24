@@ -32,7 +32,7 @@ function titleFromPrompt(prompt: string): string {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find(Boolean);
-  return (firstLine ?? "New PI session").slice(0, 96);
+  return (firstLine ?? "New VI session").slice(0, 96);
 }
 
 function safeFolderName(title: string): string {
@@ -226,7 +226,7 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
               cwd,
               title: effectiveTitle,
               prompt: [
-                "Start a new PI-managed coding session.",
+                "Start a new VI-managed coding session.",
                 `Workspace folder: ${cwd}`,
                 `Permission mode: ${permissionLabel(permissionMode)}`,
                 effectiveModel ? `Model: ${effectiveModel}` : "Model: default.",
@@ -237,12 +237,12 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
                       "Do one bounded iteration, summarize the result, then exit.",
                       "Print COMPLETE on its own line only if the whole task is finished; otherwise print CONTINUE on its own line.",
                     ].join(" ")
-                  : "True Ralph mode: disabled. Complete the requested task, then stay open and wait for follow-up instructions from PI.",
+                  : "True Ralph mode: disabled. Complete the requested task, then stay open and wait for follow-up instructions from VI.",
                 autoResumeUsageLimit
-                  ? "Usage-limit recovery: enabled. If the provider says usage limit is reached, stop safely; PI will auto-resume later."
+                  ? "Usage-limit recovery: enabled. If the provider says usage limit is reached, stop safely; VI will auto-resume later."
                   : "Usage-limit recovery: disabled.",
                 autoRestartCodex
-                  ? "Codex restart recovery: enabled. If Codex says restart is required, PI will resume this session in a fresh process."
+                  ? "Codex restart recovery: enabled. If Codex says restart is required, VI will resume this session in a fresh process."
                   : "Codex restart recovery: disabled.",
                 "",
                 "Use VI approval flow for risky operations. Keep work scoped to this session.",
@@ -286,7 +286,7 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
           Connect a machine first
         </h2>
         <p className="mt-2 text-[14px] leading-7 text-[var(--color-text-secondary)]">
-          PI needs at least one online machine before it can start a session.
+          VI needs at least one online machine before it can start a session.
         </p>
         <a
           href="/agents/new"
@@ -626,7 +626,7 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
               {ralphEnabled ? "Ralph iterations enabled" : "Enable Ralph iterations"}
             </span>
             <span className="mt-1 block text-[12px] leading-5 text-[var(--color-text-secondary)]">
-              Runs one bounded pass, exits, then PI starts the next pass if the task is not complete.
+              Runs one bounded pass, exits, then VI starts the next pass if the task is not complete.
             </span>
           </button>
         </div>
@@ -652,7 +652,7 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
                 {autoRestartCodex ? "Auto restart enabled" : "Auto restart Codex"}
               </span>
               <span className="mt-1 block text-[12px] leading-5 text-[var(--color-text-secondary)]">
-                If Codex says restart is required, PI launches a fresh process and resumes this session.
+                If Codex says restart is required, VI launches a fresh process and resumes this session.
               </span>
             </button>
           </div>

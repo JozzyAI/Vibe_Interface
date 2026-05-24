@@ -12,7 +12,7 @@ import {
 } from "@vi/core";
 
 // ---------------------------------------------------------------------------
-// PI project config
+// VI project config
 // ---------------------------------------------------------------------------
 
 export interface VIProjectConfig {
@@ -23,15 +23,15 @@ export interface VIProjectConfig {
   repo?: string;
 }
 
-export interface PIConfig {
+export interface VIConfig {
   configPath: string;
   projects: Record<string, VIProjectConfig>;
 }
 
-function loadPIConfig(): PIConfig {
+function loadVIConfig(): VIConfig {
   const workspaceRoot = process.env["VI_WORKSPACE_ROOT"] ?? join(homedir(), "pi-workspace");
   const primaryProjectId = process.env["VI_PROJECT_ID"] ?? "default";
-  const primaryProjectName = process.env["VI_PROJECT_NAME"] ?? "PI";
+  const primaryProjectName = process.env["VI_PROJECT_NAME"] ?? "VI";
 
   return {
     configPath: join(homedir(), ".pi"),
@@ -47,7 +47,7 @@ function loadPIConfig(): PIConfig {
 }
 
 // ---------------------------------------------------------------------------
-// PI session manager
+// VI session manager
 // ---------------------------------------------------------------------------
 
 export interface VISessionManager {
@@ -62,7 +62,7 @@ export interface VISessionManager {
   send: (sessionId: string, _message: string) => Promise<void>;
 }
 
-function createVISessionManager(config: PIConfig): VISessionManager {
+function createVISessionManager(config: VIConfig): VISessionManager {
   return {
     async list(projectId?: string): Promise<VISession[]> {
       const all = await listVISessions();
@@ -122,30 +122,30 @@ function createVISessionManager(config: PIConfig): VISessionManager {
 // Services singleton
 // ---------------------------------------------------------------------------
 
-export interface PIServices {
-  config: PIConfig;
+export interface VIServices {
+  config: VIConfig;
   sessionManager: VISessionManager;
 }
 
-const globalForPIServices = globalThis as typeof globalThis & {
-  _piServices?: PIServices;
+const globalForVIServices = globalThis as typeof globalThis & {
+  _viServices?: VIServices;
 };
 
-/** Synchronous config/services accessor (no async init needed for PI). */
-export function getPIServices(): PIServices {
-  if (!globalForPIServices._piServices) {
-    const config = loadPIConfig();
-    globalForPIServices._piServices = {
+/** Synchronous config/services accessor (no async init needed for VI). */
+export function getVIServices(): VIServices {
+  if (!globalForVIServices._viServices) {
+    const config = loadVIConfig();
+    globalForVIServices._viServices = {
       config,
       sessionManager: createVISessionManager(config),
     };
   }
-  return globalForPIServices._piServices;
+  return globalForVIServices._viServices;
 }
 
 /** Async wrapper for compatibility with code that calls `await getServices()`. */
-export function getServices(): Promise<PIServices> {
-  return Promise.resolve(getPIServices());
+export function getServices(): Promise<VIServices> {
+  return Promise.resolve(getVIServices());
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +168,7 @@ export async function getVerifyIssues(): Promise<VIBacklogIssue[]> {
   return [];
 }
 
-// Poller stubs (not needed for standalone PI)
+// Poller stubs (not needed for standalone VI)
 export function startBacklogPoller(): void {
   void 0;
 }

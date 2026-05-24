@@ -16,7 +16,7 @@ export async function generateMetadata(props: {
   const params = await props.params;
   return {
     title: {
-      absolute: `PI | Remote Session ${params.id.slice(0, 8)}`,
+      absolute: `VI | Remote Session ${params.id.slice(0, 8)}`,
     },
   };
 }
@@ -54,7 +54,7 @@ export default async function RemoteSessionPage(props: {
     <VIWorkspaceShell
       active="sessions"
       title="Live remote session"
-      subtitle="Watch the remote CLI, send input, and clear detected approval prompts from the same PI workspace."
+      subtitle="Watch the remote CLI, send input, and clear detected approval prompts from the same VI workspace."
       projectName={pageData.projectName}
       projects={pageData.projects}
       connectedCount={connectedCount}

@@ -79,11 +79,11 @@ export async function POST(request: NextRequest) {
 
   const outboundMessage =
     action === "approve"
-      ? [`PI decision: APPROVED`, `Request: ${title}`, `Why: ${message}`, response]
+      ? [`VI decision: APPROVED`, `Request: ${title}`, `Why: ${message}`, response]
           .filter(Boolean)
           .join("\n\n")
       : action === "reject"
-        ? [`PI decision: REJECTED`, `Request: ${title}`, `Why: ${message}`, response]
+        ? [`VI decision: REJECTED`, `Request: ${title}`, `Why: ${message}`, response]
             .filter(Boolean)
             .join("\n\n")
         : response;

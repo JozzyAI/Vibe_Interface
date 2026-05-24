@@ -97,7 +97,7 @@ export function createRelayServer(): RelayServer {
       return;
     }
 
-    // ── Presence (authenticated — pi token required) ───────────────────────
+    // ── Presence (authenticated — vi token required) ───────────────────────
     if (pathname === "/presence") {
       const token = extractBearerToken(req.headers.authorization);
       if (!token || !authorizeRelayToken(tokens, token, "vi")) {
@@ -230,7 +230,7 @@ export function createRelayServer(): RelayServer {
           });
           // Push to dashboard if connected
           const agentId = approvalRequest.agentId;
-          registry.route({ type: "approval_request", to: "pi-dashboard", sentAt: new Date().toISOString(), from: agentId, payload: approvalRequest });
+          registry.route({ type: "approval_request", to: "vi-dashboard", sentAt: new Date().toISOString(), from: agentId, payload: approvalRequest });
           jsonResponse(res, 200, { approvalRequest });
           return;
         }
@@ -253,8 +253,8 @@ export function createRelayServer(): RelayServer {
       }
     }
 
-    // ── PI / dashboard routes (/v1/vi/*) ───────────────────────────────────
-    // Called by dashboard client. Auth: pi token.
+    // ── VI / dashboard routes (/v1/vi/*) ───────────────────────────────────
+    // Called by dashboard client. Auth: vi token.
     if (pathname.startsWith("/v1/vi/")) {
       const token = extractBearerToken(req.headers.authorization);
       if (!token) {

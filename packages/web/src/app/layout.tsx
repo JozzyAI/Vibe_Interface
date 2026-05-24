@@ -32,13 +32,13 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: {
       template: `%s | ${projectName}`,
-      default: `PI | ${projectName}`,
+      default: `VI | ${projectName}`,
     },
     description: "Vibe Interface — control plane for AI coding agents",
     appleWebApp: {
       capable: true,
       statusBarStyle: "black-translucent",
-      title: `PI | ${projectName}`,
+      title: `VI | ${projectName}`,
     },
   };
 }

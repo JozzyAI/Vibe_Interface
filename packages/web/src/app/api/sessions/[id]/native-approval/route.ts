@@ -3,7 +3,7 @@ import { getVISession } from "@vi/core";
 import { getCorrelationId, jsonWithCorrelation } from "@/lib/observability";
 import { parseNativeCodexApproval } from "@/lib/native-codex-approval";
 
-// Stub: terminal capture not available in standalone PI (no tmux dependency)
+// Stub: terminal capture not available in standalone VI (no tmux dependency)
 async function captureTerminalOutput(_tmuxName: string): Promise<string> {
   return "";
 }

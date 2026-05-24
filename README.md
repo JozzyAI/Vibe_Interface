@@ -134,7 +134,7 @@ openssl rand -hex 32   # → VI_TOKEN
 
 # Set secrets
 fly secrets set \
-  VI_RELAY_TOKENS="<DAEMON_TOKEN>:daemon:local-daemon,<VI_TOKEN>:pi:local-pi" \
+  VI_RELAY_TOKENS="<DAEMON_TOKEN>:daemon:local-daemon,<VI_TOKEN>:vi:local-vi" \
   VI_RELAY_OWNER_TOKEN="<VI_TOKEN>" \
   VI_RELAY_PUBLIC_WS_URL="wss://your-app.fly.dev" \
   --app <your-app-name>
@@ -289,7 +289,7 @@ See [packages/relay/README.md](packages/relay/README.md) and [docs/cloud-control
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `VI_RELAY_TOKENS` | Yes | `token:kind:label,...` — auth tokens. `kind` is `daemon` or `pi` |
+| `VI_RELAY_TOKENS` | Yes | `token:kind:label,...` — auth tokens. `kind` is `daemon` or `vi` |
 | `VI_RELAY_OWNER_TOKEN` | Yes | Bootstrap token for default owner row (set to same value as VI_TOKEN) |
 | `VI_RELAY_PUBLIC_WS_URL` | Yes | Public WebSocket URL baked into enrollment pair commands |
 | `VI_RELAY_DB_PATH` | Optional | SQLite path (default `./vi-relay.db`; use `/data/vi-relay.db` on Fly) |

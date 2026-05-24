@@ -28,7 +28,7 @@ if ! command -v vi-agent >/dev/null 2>&1; then
     echo "pip is required to install vi-agent."
     exit 1
   fi
-  echo "Installing vi-agent from PI..."
+  echo "Installing vi-agent from VI..."
   python3 -m pip install --user "$PACKAGE_URL"
   export PATH="$HOME/.local/bin:$PATH"
 fi

@@ -352,7 +352,7 @@ export function VIIdeaBoard({
             </h2>
             <p className="mt-2 max-w-3xl text-[12px] leading-6 text-[var(--color-text-secondary)]">
               The title becomes the project folder name under <code>{executionRoot ?? "/srv/pi/workspaces"}</code>.
-              PI starts a fresh remote job for the selected agent when you send the idea.
+              VI starts a fresh remote job for the selected agent when you send the idea.
             </p>
           </div>
           <div className="flex gap-2">

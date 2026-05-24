@@ -38,10 +38,10 @@ export default function LoginPage() {
       <div className="w-full max-w-[380px] px-4">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl border border-[#9ed9e5] bg-[#0b8ea6] text-[17px] font-bold text-white shadow-sm">
-            PI
+            VI
           </div>
           <h1 className="text-[22px] font-semibold text-[var(--color-text-primary)]">
-            Access PI
+            Access VI
           </h1>
           <p className="mt-1 text-[13px] text-[var(--color-text-tertiary)]">
             Enter your access token to continue

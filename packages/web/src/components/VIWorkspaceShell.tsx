@@ -88,7 +88,7 @@ export function VIWorkspaceShell({
           href="/"
           className="mb-3 grid h-12 w-12 place-items-center rounded-2xl border border-[#9ed9e5] bg-[#0b8ea6] text-[13px] font-bold text-white shadow-sm hover:no-underline"
         >
-          PI
+          VI
         </Link>
         <nav className="flex flex-1 flex-col items-center gap-3">
           <RailIcon href="/" label="Home" active={active === "home"}>+</RailIcon>
@@ -117,7 +117,7 @@ export function VIWorkspaceShell({
             &lt;
           </Link>
           <div className="grid h-8 w-8 place-items-center rounded-lg bg-[#0b8ea6] text-[11px] font-bold text-white">
-            PI
+            VI
           </div>
           <div className="min-w-0">
             <p className="truncate text-[15px] font-semibold">{projectName ?? "Vibe Interface"}</p>
@@ -229,7 +229,7 @@ export function VIWorkspaceShell({
               </p>
               <div className="mt-3 space-y-2 text-[13px] text-[#737882]">
                 <p className="truncate">root: {workspaceRoot}</p>
-                <p>PI keeps agents, ideas, and approvals in this same workspace.</p>
+                <p>VI keeps agents, ideas, and approvals in this same workspace.</p>
               </div>
             </div>
           </>

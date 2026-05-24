@@ -66,7 +66,7 @@ fly deploy --ha=false --app vi-relay-jozzy
 # 3. Set secrets (generate real tokens — do NOT use these placeholders)
 #    Generate: openssl rand -hex 32  (run twice)
 fly secrets set \
-  VI_RELAY_TOKENS="<DAEMON_TOKEN>:daemon:local-daemon,<VI_TOKEN>:pi:local-pi" \
+  VI_RELAY_TOKENS="<DAEMON_TOKEN>:daemon:local-daemon,<VI_TOKEN>:vi:local-vi" \
   VI_RELAY_OWNER_TOKEN="<VI_TOKEN>" \
   VI_RELAY_PUBLIC_WS_URL="wss://vi-relay-jozzy.fly.dev" \
   --app vi-relay-jozzy
@@ -119,7 +119,7 @@ Rotate tokens when: a token is accidentally exposed (printed in terminal, pasted
 2. Set new Fly secrets (you run this with real values):
    ```bash
    fly secrets set \
-     VI_RELAY_TOKENS="<NEW_DAEMON_TOKEN>:daemon:local-daemon,<NEW_VI_TOKEN>:pi:local-pi" \
+     VI_RELAY_TOKENS="<NEW_DAEMON_TOKEN>:daemon:local-daemon,<NEW_VI_TOKEN>:vi:local-vi" \
      VI_RELAY_OWNER_TOKEN="<NEW_VI_TOKEN>" \
      VI_RELAY_PUBLIC_WS_URL="wss://vi-relay-jozzy.fly.dev" \
      --app vi-relay-jozzy
@@ -152,11 +152,11 @@ Rotate tokens when: a token is accidentally exposed (printed in terminal, pasted
 
 `VI_RELAY_TOKENS` is a comma-separated list of `token:kind:label` entries:
 ```
-daemon-abc:daemon:my-machines,pi-xyz:pi:dashboard
+daemon-abc:daemon:my-machines,vi-xyz:vi:dashboard
 ```
 
 - `daemon` tokens: used by vi-agent (heartbeat, register, report, enrollment consume)
-- `pi` tokens: used by the dashboard (overview, jobs, approvals, enrollments)
+- `vi` tokens: used by the dashboard (overview, jobs, approvals, enrollments)
 
 ---
 

@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: {
-    absolute: "PI | PI Sessions",
+    absolute: "VI | VI Sessions",
   },
 };
 
