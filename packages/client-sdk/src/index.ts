@@ -5,7 +5,7 @@ export type {
   VIApprovalRiskLevel,
   VIApprovalEventType,
   VIApprovalPrimaryAction,
-  PIExternalActionKind,
+  VIExternalActionKind,
   RemoteAgentStatus,
   RemoteAgentConnectionState,
   RemoteRelayState,

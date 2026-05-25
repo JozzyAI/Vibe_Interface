@@ -178,9 +178,14 @@ export default function SessionDetailScreen() {
         </Section>
       )}
 
-      {/* Send input */}
+      {/* Send input — relay stores and delivers to vi-agent poll response.
+           vi-agent does not yet consume pendingInputs, so input reaches relay
+           but is not forwarded to Claude until vi-agent support lands. */}
       {canSendInput && (
         <Section title="Send Input">
+          <Text style={s.partialNote}>
+            Input delivery pending vi-agent update — queued at relay, not yet forwarded to Claude.
+          </Text>
           <View style={s.inputRow}>
             <TextInput
               style={s.textInput}
@@ -234,6 +239,7 @@ const s = StyleSheet.create({
   section: { marginTop: 16 },
   sectionTitle: { fontSize: 13, fontWeight: "700", color: "#666", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 },
   logText: { fontFamily: "monospace", fontSize: 12, color: "#222", lineHeight: 18, minWidth: "100%" },
+  partialNote: { fontSize: 12, color: "#e65100", marginBottom: 8, fontStyle: "italic" },
   approvalCard: { backgroundColor: "#fff", borderRadius: 10, padding: 14, marginBottom: 10 },
   approvalHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8, gap: 8 },
   riskBadge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, alignSelf: "flex-start" },

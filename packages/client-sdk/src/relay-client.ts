@@ -7,7 +7,7 @@ import type {
   VIApprovalRiskLevel,
   VIApprovalEventType,
   VIApprovalPrimaryAction,
-  PIExternalActionKind,
+  VIExternalActionKind,
 } from "./types.js";
 
 export interface VIRelayClientConfig {
@@ -190,7 +190,7 @@ export class VIRelayClient {
     message: string;
     riskLevel?: VIApprovalRiskLevel;
     command?: string;
-    actionKind?: PIExternalActionKind;
+    actionKind?: VIExternalActionKind;
     suggestedCommand?: string;
     helperPrompt?: string;
     eventType?: VIApprovalEventType;

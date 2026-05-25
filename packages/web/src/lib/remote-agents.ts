@@ -8,7 +8,7 @@ import type {
   VIApprovalPrimaryAction,
   VIApprovalPermissionMode,
   VIApprovalRiskLevel,
-  PIExternalActionKind,
+  VIExternalActionKind,
   RemoteAgentConnectionState,
   RemoteAuthConnectorSummary,
   RemoteAgentStatus,
@@ -1340,7 +1340,7 @@ export async function createRemoteApprovalRequest(input: {
   message: string;
   riskLevel?: VIApprovalRiskLevel;
   command?: string;
-  actionKind?: PIExternalActionKind;
+  actionKind?: VIExternalActionKind;
   suggestedCommand?: string;
   helperPrompt?: string;
   eventType?: VIApprovalEventType;

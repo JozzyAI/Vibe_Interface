@@ -12,7 +12,7 @@ export type VIApprovalEventType =
   | "delete_operation" | "plan_approval" | "final_approval"
   | "scope_clarification" | "example_request" | "external_action" | "generic";
 export type VIApprovalPrimaryAction = "approve" | "reply";
-export type PIExternalActionKind =
+export type VIExternalActionKind =
   | "github_auth" | "codex_update" | "install_tool" | "open_browser_login"
   | "run_host_setup" | "other";
 
@@ -107,7 +107,7 @@ export interface RemoteApprovalRequest {
   message: string;
   riskLevel: VIApprovalRiskLevel;
   command?: string | null;
-  actionKind?: PIExternalActionKind;
+  actionKind?: VIExternalActionKind;
   suggestedCommand?: string | null;
   helperPrompt?: string | null;
   eventType?: VIApprovalEventType;
