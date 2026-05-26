@@ -1,0 +1,6 @@
+node_modules/
+dist/
+release/
+out/
+*.local
+electron.vite.config.*.mjs
