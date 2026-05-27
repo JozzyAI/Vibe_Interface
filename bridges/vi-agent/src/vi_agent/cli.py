@@ -900,12 +900,25 @@ _CLAUDE_HOOK_ALLOWED_TOOLS = [
 _CLAUDE_HOOK_TIMEOUT_MS = 3_600_000
 
 
-def _claude_approval_hooks_enabled() -> bool:
-    """Return True only when VI_ENABLE_CLAUDE_APPROVAL_HOOKS=1 is explicitly set.
-    Default is disabled — the Claude Code hook system is not yet reliable enough
-    for production use (hooks are killed after ~2-3 seconds by Claude Code 2.1.138+).
+def _claude_approval_hooks_enabled(state_path: "Path | None" = None) -> bool:
+    """Return True when approval hooks should be installed for this Claude session.
+
+    Checks in order:
+    1. VI_ENABLE_CLAUDE_APPROVAL_HOOKS=1 env var (daemon-level override)
+    2. agent.approvalHooksEnabled = true in the state file (per-agent config,
+       readable without restarting the daemon — just update the state file and
+       start a new session)
     """
-    return os.environ.get("VI_ENABLE_CLAUDE_APPROVAL_HOOKS", "0").strip() == "1"
+    if os.environ.get("VI_ENABLE_CLAUDE_APPROVAL_HOOKS", "0").strip() == "1":
+        return True
+    if state_path is not None:
+        state = load_state_file(state_path)
+        agent_cfg = state.get("agent") or {}
+        if isinstance(agent_cfg, dict):
+            val = agent_cfg.get("approvalHooksEnabled")
+            if val is True or str(val).lower() in ("1", "true", "yes"):
+                return True
+    return False
 
 
 def _inject_skip_permissions(command: list[str]) -> list[str]:
@@ -1873,7 +1886,7 @@ def run_wrapped(args: argparse.Namespace) -> int:
 
     is_claude_command = "claude" in launch_tool.lower() or (command and "claude" in str(command[0]).lower())
     if is_claude_command:
-        if _claude_approval_hooks_enabled():
+        if _claude_approval_hooks_enabled(state_path=state_path):
             try:
                 install_claude_hook(launch_cwd)
             except Exception as hook_err:
@@ -3797,6 +3810,14 @@ def build_parser() -> argparse.ArgumentParser:
     cleanup_parser.add_argument("--clear-jobs", action="store_true", help="Clear cached local job/request state")
     subparsers.add_parser("status", parents=[common])
     subparsers.add_parser("context", parents=[common])
+    enable_hooks_parser = subparsers.add_parser(
+        "enable-approval-hooks",
+        parents=[common],
+        help="Enable Claude approval hooks for this agent (writes to state file, no daemon restart needed)",
+    )
+    enable_hooks_parser.add_argument(
+        "--disable", action="store_true", help="Disable approval hooks instead of enabling"
+    )
 
     debug_parser = subparsers.add_parser("debug", parents=[common], help="Debug helpers")
     debug_parser.add_argument(
@@ -3806,6 +3827,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     return parser
+
+
+def enable_approval_hooks(args: argparse.Namespace) -> int:
+    state_path = resolve_state_file(args)
+    state = load_state_file(state_path)
+    agent_cfg = state.get("agent") or {}
+    if not isinstance(agent_cfg, dict):
+        agent_cfg = {}
+    disable = getattr(args, "disable", False)
+    agent_cfg["approvalHooksEnabled"] = not disable
+    state["agent"] = agent_cfg
+    write_state_file(state_path, state)
+    action = "disabled" if disable else "enabled"
+    print(f"Approval hooks {action} in {state_path}")
+    print("Start a new Claude session for the change to take effect.")
+    return 0
 
 
 def main() -> None:
@@ -3894,6 +3931,8 @@ def main() -> None:
         raise SystemExit(status_daemon(args))
     if args.command == "context":
         raise SystemExit(context_bridge(args))
+    if args.command == "enable-approval-hooks":
+        raise SystemExit(enable_approval_hooks(args))
     if args.command == "debug":
         if args.debug_subcommand == "env":
             raise SystemExit(debug_env(args))
