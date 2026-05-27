@@ -174,8 +174,8 @@ export function MuxProvider({ children }: { children: ReactNode }) {
         }
       });
 
-      ws.addEventListener("error", (err) => {
-        console.error("[MuxProvider] WebSocket error:", err);
+      ws.addEventListener("error", () => {
+        console.warn("[MuxProvider] WebSocket connection error (url:", url, ")");
       });
 
       ws.addEventListener("close", () => {

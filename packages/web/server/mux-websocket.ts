@@ -61,15 +61,18 @@ interface SessionPatch {
 }
 
 /**
- * Manages a single shared SSE connection to Next.js /api/events.
- * Broadcasts session patches to all subscribed callbacks.
- * Lazily connects on first subscriber, disconnects when the last one leaves.
+ * Polls Next.js /api/sessions/patches every POLL_INTERVAL_MS and broadcasts
+ * session lists to all subscribed callbacks. Lazily starts on first subscriber,
+ * stops when the last one leaves.
+ *
+ * /api/events is a one-shot endpoint (sends one snapshot then closes), so a
+ * persistent SSE connection is not viable here.
  */
 export class SessionBroadcaster {
   private subscribers = new Set<(sessions: SessionPatch[]) => void>();
-  private abortController: AbortController | null = null;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
   private readonly baseUrl: string;
+  private static readonly POLL_INTERVAL_MS = 5000;
 
   constructor(nextPort: string) {
     this.baseUrl = `http://localhost:${nextPort}`;
@@ -77,7 +80,7 @@ export class SessionBroadcaster {
 
   /**
    * Subscribe to session patches. Returns an unsubscribe function.
-   * Sends an immediate snapshot to the new subscriber, then live SSE pushes.
+   * Sends an immediate snapshot to the new subscriber, then polls for updates.
    */
   subscribe(callback: (sessions: SessionPatch[]) => void): () => void {
     const wasEmpty = this.subscribers.size === 0;
@@ -90,15 +93,14 @@ export class SessionBroadcaster {
       }
     });
 
-    // Start the shared SSE connection if this is the first subscriber
     if (wasEmpty) {
-      void this.connect();
+      this.startPolling();
     }
 
     return () => {
       this.subscribers.delete(callback);
       if (this.subscribers.size === 0) {
-        this.disconnect();
+        this.stopPolling();
       }
     };
   }
@@ -113,7 +115,7 @@ export class SessionBroadcaster {
     }
   }
 
-  /** One-shot HTTP fetch of the current session list for immediate delivery. */
+  /** One-shot HTTP fetch of the current session list. */
   private async fetchSnapshot(): Promise<SessionPatch[] | null> {
     try {
       const controller = new AbortController();
@@ -135,79 +137,21 @@ export class SessionBroadcaster {
     }
   }
 
-  /** Open a persistent SSE connection and stream events to all subscribers. */
-  private async connect(): Promise<void> {
-    if (this.abortController) return;
-
-    const controller = new AbortController();
-    this.abortController = controller;
-    const { signal } = controller;
-
-    try {
-      const res = await fetch(`${this.baseUrl}/api/events`, {
-        signal,
-        headers: { Accept: "text/event-stream" },
-      });
-
-      if (!res.ok || !res.body) {
-        throw new Error(`SSE connect failed: ${res.status}`);
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (!signal.aborted) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const event = JSON.parse(line.slice(6)) as {
-              type: string;
-              sessions?: SessionPatch[];
-            };
-            if (event.type === "snapshot" && event.sessions) {
-              this.broadcast(event.sessions);
-            }
-          } catch {
-            // ignore malformed events
-          }
+  private startPolling(): void {
+    this.pollTimer = setInterval(() => {
+      void this.fetchSnapshot().then((sessions) => {
+        if (sessions && this.subscribers.size > 0) {
+          this.broadcast(sessions);
         }
-      }
-    } catch (err) {
-      if (signal.aborted) return; // intentional disconnect, not an error
-      console.warn("[MuxServer] SSE connection lost:", err instanceof Error ? err.message : err);
-    } finally {
-      // Only clear our own controller — a concurrent connect() may have already
-      // set a new one (e.g. disconnect() → subscribe() → connect() in the same tick).
-      if (this.abortController === controller) {
-        this.abortController = null;
-      }
-    }
-
-    // Reconnect with backoff if there are still subscribers
-    if (this.subscribers.size > 0) {
-      console.log("[MuxServer] SSE reconnecting in 5s");
-      this.reconnectTimer = setTimeout(() => {
-        this.reconnectTimer = null;
-        if (this.subscribers.size > 0) void this.connect();
-      }, 5000);
-    }
+      });
+    }, SessionBroadcaster.POLL_INTERVAL_MS);
   }
 
-  private disconnect(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
+  private stopPolling(): void {
+    if (this.pollTimer !== null) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
     }
-    this.abortController?.abort();
-    this.abortController = null;
   }
 }
 
