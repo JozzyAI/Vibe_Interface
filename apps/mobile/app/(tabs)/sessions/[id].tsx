@@ -178,13 +178,11 @@ export default function SessionDetailScreen() {
         </Section>
       )}
 
-      {/* Send input — relay stores and delivers to vi-agent poll response.
-           vi-agent does not yet consume pendingInputs, so input reaches relay
-           but is not forwarded to Claude until vi-agent support lands. */}
+      {/* Send input — stored in relay, delivered to vi-agent on next poll. */}
       {canSendInput && (
         <Section title="Send Input">
           <Text style={s.partialNote}>
-            Input delivery pending vi-agent update — queued at relay, not yet forwarded to Claude.
+            Input is sent to the running session through VI Relay.
           </Text>
           <View style={s.inputRow}>
             <TextInput

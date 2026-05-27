@@ -144,7 +144,7 @@ export default function SessionDetail() {
         {/* Send input */}
         {canSendInput && (
           <Section title="Send Input">
-            <p style={s.partialNote}>Input delivery pending vi-agent update — queued at relay, not yet forwarded to Claude.</p>
+            <p style={s.partialNote}>Input is sent to the running session through VI Relay.</p>
             <div style={s.inputRow}>
               <textarea
                 style={s.textInput}
