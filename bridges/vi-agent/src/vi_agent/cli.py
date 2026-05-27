@@ -2624,6 +2624,7 @@ def run_daemon(args: argparse.Namespace) -> int:
         inputs = job.get("pendingInputs")
         if not isinstance(inputs, list):
             return []
+        job_id = job.get("jobId", "unknown")
         session_name = str(job_state["sessionName"])
         sent_ids: list[str] = []
         for entry in inputs:
@@ -2639,6 +2640,18 @@ def run_daemon(args: argparse.Namespace) -> int:
                 sent = tmux_send_key(session_name, key)
             else:
                 sent = tmux_send_input(session_name, text, submit if isinstance(submit, bool) else True)
+            print(
+                json.dumps(
+                    {
+                        "event": "input_delivered",
+                        "jobId": job_id,
+                        "inputId": input_id,
+                        "textLength": len(text),
+                        "key": key if isinstance(key, str) else None,
+                        "status": "sent" if sent else "failed",
+                    }
+                )
+            )
             if sent:
                 sent_ids.append(input_id)
         return sent_ids
