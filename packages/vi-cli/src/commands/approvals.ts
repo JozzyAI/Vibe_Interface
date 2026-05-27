@@ -1,9 +1,10 @@
 import { Command } from "commander";
 import { getClient } from "../client.js";
-import { withRelay } from "../exit.js";
+import { withRelay, exit, guardReadOnly, ExitCode } from "../exit.js";
 import { printTable, printJson, ago, short } from "../format.js";
 
 export function registerApprovalsCommand(program: Command): void {
+  // vi approvals
   program
     .command("approvals")
     .description("List approval requests (default: open only)")
@@ -44,4 +45,56 @@ export function registerApprovalsCommand(program: Command): void {
         ]),
       );
     });
+
+  // vi approve <requestId>
+  program
+    .command("approve <requestId>")
+    .description("Approve an open approval request")
+    .option("--response <text>", "Optional approval note")
+    .option("--json", "Output the updated approval request as JSON")
+    .action(async (requestId: string, opts: { response?: string; json?: boolean }) => {
+      guardReadOnly();
+      await respondToApproval(requestId, "approve", opts.response, opts.json);
+    });
+
+  // vi reject <requestId>
+  program
+    .command("reject <requestId>")
+    .description("Reject an open approval request")
+    .option("--response <text>", "Optional rejection reason")
+    .option("--json", "Output the updated approval request as JSON")
+    .action(async (requestId: string, opts: { response?: string; json?: boolean }) => {
+      guardReadOnly();
+      await respondToApproval(requestId, "reject", opts.response, opts.json);
+    });
+}
+
+async function respondToApproval(
+  requestId: string,
+  action: "approve" | "reject",
+  response: string | undefined,
+  json: boolean | undefined,
+): Promise<void> {
+  const { requests } = await withRelay(() => getClient().getRemoteApprovalOverview());
+  const req = requests.find((r) => r.requestId === requestId);
+
+  if (!req) {
+    exit(ExitCode.NOT_FOUND, `approval request not found: ${requestId}`);
+  }
+
+  if (req.status !== "open") {
+    exit(ExitCode.USER_ERROR, `approval request is already "${req.status}": ${requestId}`);
+  }
+
+  const updated = await withRelay(() =>
+    getClient().respondToRemoteApproval({ requestId, action, response }),
+  );
+
+  if (json) {
+    printJson(updated);
+    return;
+  }
+
+  const label = action === "approve" ? "Approved" : "Rejected";
+  process.stdout.write(`${label}: ${requestId}\n`);
 }
