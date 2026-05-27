@@ -92,6 +92,78 @@ export function registerSessionCommands(program: Command): void {
       process.stdout.write(`Input queued for session ${short(jobId, 22)}.\n`);
     });
 
+  // vi session wait <jobId>
+  session
+    .command("wait <jobId>")
+    .description("Wait until a session reaches one of the target states")
+    .requiredOption(
+      "--until <states>",
+      "Comma-separated target states.\n" +
+        "  job.status:          running, completed, failed, archived\n" +
+        "  providerState.state: waiting_input, busy, waiting_approval",
+    )
+    .option("--timeout <seconds>", "Timeout in seconds before exit 1 (default: 300)", "300")
+    .option("--json", "Output JSON only on success")
+    .action(async (jobId: string, opts: { until: string; timeout: string; json?: boolean }) => {
+      const targetStates = opts.until
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (targetStates.length === 0) {
+        exit(ExitCode.USER_ERROR, "--until requires at least one state");
+      }
+
+      const timeoutSecs = Number.parseInt(opts.timeout, 10);
+      if (!Number.isInteger(timeoutSecs) || timeoutSecs <= 0) {
+        exit(ExitCode.USER_ERROR, "--timeout must be a positive integer");
+      }
+
+      const startMs = Date.now();
+      const timeoutMs = timeoutSecs * 1000;
+
+      for (;;) {
+        const elapsed = Date.now() - startMs;
+        if (elapsed >= timeoutMs) {
+          exit(
+            ExitCode.USER_ERROR,
+            `timeout after ${timeoutSecs}s waiting for session ${jobId} to reach: ${targetStates.join(", ")}`,
+          );
+        }
+
+        const { jobs } = await withRelay(() => getClient().getRemoteApprovalOverview());
+        const job = jobs.find((j) => j.jobId === jobId);
+
+        if (!job) {
+          exit(ExitCode.NOT_FOUND, `session not found: ${jobId}`);
+        }
+
+        // Check job.status first, then job.providerState.state
+        const statusMatch = targetStates.includes(job.status) ? job.status : undefined;
+        const providerMatch =
+          !statusMatch && job.providerState?.state && targetStates.includes(job.providerState.state)
+            ? job.providerState.state
+            : undefined;
+        const matchedState = statusMatch ?? providerMatch;
+        const matchedField = statusMatch ? "status" : providerMatch ? "providerState.state" : undefined;
+
+        if (matchedState && matchedField) {
+          const elapsedSeconds = Math.round((Date.now() - startMs) / 1000);
+          if (opts.json) {
+            printJson({ jobId, matchedState, matchedField, elapsedSeconds, job });
+          } else {
+            process.stdout.write(
+              `Session ${short(jobId, 22)} reached ${matchedState} (${matchedField}) after ${elapsedSeconds}s.\n`,
+            );
+          }
+          process.exit(ExitCode.SUCCESS);
+        }
+
+        // Sleep up to 5s, but no longer than the remaining timeout
+        const remaining = timeoutMs - (Date.now() - startMs);
+        await new Promise<void>((resolve) => setTimeout(resolve, Math.min(5000, remaining)));
+      }
+    });
+
   // vi session get <jobId>
   session
     .command("get <jobId>")
