@@ -2,7 +2,7 @@
   "name": "@vi/desktop",
   "version": "0.1.0",
   "private": true,
-  "main": "dist/main/index.js",
+  "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -12,13 +12,13 @@
   },
   "dependencies": {
     "@vi/client-sdk": "workspace:*",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
     "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^34.3.0",
     "electron-builder": "^25.1.8",
@@ -28,12 +28,18 @@
   "build": {
     "appId": "ai.dynastylab.vi.desktop",
     "productName": "VI",
-    "directories": { "output": "release" },
+    "directories": {
+      "output": "release"
+    },
     "mac": {
       "target": "dmg",
       "category": "public.app-category.productivity"
     },
-    "win": { "target": "nsis" },
-    "files": ["dist/**/*"]
+    "win": {
+      "target": "nsis"
+    },
+    "files": [
+      "out/**/*"
+    ]
   }
 }

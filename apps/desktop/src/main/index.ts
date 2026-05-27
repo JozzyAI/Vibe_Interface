@@ -35,6 +35,11 @@ function createWindow(): BrowserWindow {
     void win.loadFile(join(__dirname, "../renderer/index.html"));
   }
 
+  // DevTools only when explicitly requested — detached window steals focus by default
+  if (process.env["ELECTRON_RENDERER_URL"] && process.env["VI_DESKTOP_OPEN_DEVTOOLS"]) {
+    win.webContents.openDevTools({ mode: "right" });
+  }
+
   return win;
 }
 

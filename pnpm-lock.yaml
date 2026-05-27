@@ -14,20 +14,20 @@ importers:
         specifier: workspace:*
         version: link:../../packages/client-sdk
       react:
-        specifier: ^19.0.0
-        version: 19.0.0
+        specifier: 19.2.6
+        version: 19.2.6
       react-dom:
-        specifier: ^19.0.0
-        version: 19.2.6(react@19.0.0)
+        specifier: 19.2.6
+        version: 19.2.6(react@19.2.6)
       react-router-dom:
         specifier: ^6.28.0
-        version: 6.30.3(react-dom@19.2.6(react@19.0.0))(react@19.0.0)
+        version: 6.30.3(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
     devDependencies:
       '@types/react':
-        specifier: ^19.0.0
+        specifier: 19.2.14
         version: 19.2.14
       '@types/react-dom':
-        specifier: ^19.0.0
+        specifier: 19.2.3
         version: 19.2.3(@types/react@19.2.14)
       '@vitejs/plugin-react':
         specifier: ^4.3.4
@@ -10380,17 +10380,17 @@ snapshots:
     optionalDependencies:
       '@types/react': 18.3.29
 
-  react-router-dom@6.30.3(react-dom@19.2.6(react@19.0.0))(react@19.0.0):
+  react-router-dom@6.30.3(react-dom@19.2.6(react@19.2.6))(react@19.2.6):
     dependencies:
       '@remix-run/router': 1.23.2
-      react: 19.0.0
-      react-dom: 19.2.6(react@19.0.0)
-      react-router: 6.30.3(react@19.0.0)
+      react: 19.2.6
+      react-dom: 19.2.6(react@19.2.6)
+      react-router: 6.30.3(react@19.2.6)
 
-  react-router@6.30.3(react@19.0.0):
+  react-router@6.30.3(react@19.2.6):
     dependencies:
       '@remix-run/router': 1.23.2
-      react: 19.0.0
+      react: 19.2.6
 
   react-style-singleton@2.2.3(@types/react@18.3.29)(react@19.0.0):
     dependencies:

@@ -386,6 +386,54 @@ If selection disappears on mouseup: check that `tmux set-option mouse off` is ap
 
 ---
 
+## 13. Electron Desktop — Paused (WSLg rendering issue)
+
+**Status:** `apps/desktop` scaffolded, builds, typechecks, and renderer DOM mounts correctly — but the visible WSLg window shows blank/white UI. Work paused pending WSLg restart.
+
+### What was done
+- `apps/desktop` created with `electron-vite` + React 19 + TypeScript
+- IPC plumbing: `ipc.ts` / `store.ts` / `preload/index.ts` (contextBridge `window.electronAPI`)
+- Renderer: `HashRouter` + `App.tsx` with Setup screen (relay URL + VI token) and main layout (sidebar nav, Machines / Sessions / Approvals tabs)
+- Config persisted to `userData/vi-config.json` (plain JSON for MVP; TODO: OS keychain)
+- WSL2 guard in `main/index.ts`: `disable-gpu` + `disable-software-rasterizer` switches applied when `WSL_DISTRO_NAME` or `WSL_INTEROP` is detected
+- DevTools gated on `VI_DESKTOP_OPEN_DEVTOOLS=1` env var (unset by default) — opened `mode: "right"` (docked) to prevent focus theft
+
+### Diagnostics confirmed working
+These checks were run via `win.webContents.executeJavaScript()` and `BrowserWindow` API calls, and all passed:
+- `win.isVisible()` → `true`
+- `win.isFocused()` → `true`
+- `document.title` → `"VI"`
+- `document.getElementById("root")` contained full Setup screen DOM (relay URL input, VI token input, Save button, Clear button)
+- No `did-fail-load` event fired
+- No renderer crash — `did-finish-load` confirmed
+
+### Root cause identified
+The very first Electron launch in the session produced this log entry:
+
+```
+[FATAL:gpu_data_manager_impl_private.cc(423)] GPU process isn't usable. Goodbye.
+```
+
+This FATAL GPU crash corrupted WSLg's GPU/compositor state for the entire session. Subsequent launches show the correct DOM in diagnostics, but WSLg cannot paint pixels to the window surface — the window appears blank/white even though the renderer is fully loaded.
+
+This is **not a code bug**. The renderer works; WSLg's compositor is stuck.
+
+### Recovery steps
+1. In Windows PowerShell: `wsl --shutdown`
+2. Reopen WSL terminal
+3. `cd /mnt/c/Users/lijoe/Desktop/codes/Project_Interface/apps/desktop && pnpm dev`
+4. The Setup screen (Relay Base URL, VI Token, Save & Connect) should be visible and clickable
+
+### Code guidelines for resuming
+- Do **not** change `main/index.ts` further until after the WSLg restart confirms the existing code works
+- Keep DevTools off by default — `VI_DESKTOP_OPEN_DEVTOOLS=1` must be set explicitly
+- The `openDevTools({ mode: "detach" })` pattern steals renderer focus; always use `mode: "right"` (docked) if enabling DevTools programmatically
+- `playwright-core` was added as a devDependency during an aborted Playwright driver attempt — remove it from `apps/desktop/package.json` before committing
+- Root `tsconfig.json` was fixed: changed from `{ "extends": "expo/tsconfig.base" }` to `{ "compilerOptions": {} }` to silence `[WARNING] Cannot find base config file "expo/tsconfig.base"` on every `electron-vite` build
+- Do **not** commit desktop changes until after successful WSLg restart verification
+
+---
+
 ## 12. Repo Structure Quick Reference
 
 ```
