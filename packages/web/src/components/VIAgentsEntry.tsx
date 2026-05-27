@@ -112,7 +112,7 @@ function folderName(path: string | undefined): string {
 }
 
 function pairingCommand(enrollment: RemoteEnrollmentSummary | null): string | null {
-  if (!enrollment || typeof window === "undefined") return null;
+  if (!enrollment) return null;
   return `vi-agent pair --server ${VI_SERVER_ORIGIN} --code ${enrollment.code} --start`;
 }
 
@@ -145,9 +145,10 @@ export function VIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
     projectLabel: "local-machine",
     expiresInMinutes: 60,
   });
-  const [latestEnrollment, setLatestEnrollment] = useState<RemoteEnrollmentSummary | null>(
-    initialRemoteOverview.enrollments[0] ?? null,
-  );
+  // Do not pre-populate from overview: the pre-existing enrollment has no pairCommand,
+  // so the fallback would show the wrong URL in cloud mode. Always require a fresh
+  // "Generate Code" click so the relay returns the correct pairCommand.
+  const [latestEnrollment, setLatestEnrollment] = useState<RemoteEnrollmentSummary | null>(null);
   const [latestPairCommand, setLatestPairCommand] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
