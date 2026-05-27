@@ -3,8 +3,14 @@ export const ExitCode = {
   USER_ERROR: 1,
   RELAY_ERROR: 2,
   NOT_FOUND: 3,
-  READ_ONLY: 4, // reserved for Phase 2
+  READ_ONLY: 4,
 } as const;
+
+export function guardReadOnly(): void {
+  if (process.env["VI_CLI_READ_ONLY"] === "1") {
+    exit(ExitCode.READ_ONLY, "write commands are disabled (VI_CLI_READ_ONLY=1)");
+  }
+}
 
 export function exit(code: number, message: string): never {
   process.stderr.write(`Error: ${message}\n`);

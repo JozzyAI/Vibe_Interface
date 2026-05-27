@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import type { RemoteAgentJob } from "@vi/client-sdk";
 import { getClient } from "../client.js";
-import { withRelay, exit, ExitCode } from "../exit.js";
+import { withRelay, exit, guardReadOnly, ExitCode } from "../exit.js";
 import { printTable, printJson, ago, short } from "../format.js";
 
 export function registerSessionCommands(program: Command): void {
@@ -46,6 +46,51 @@ export function registerSessionCommands(program: Command): void {
   const session = program
     .command("session")
     .description("Session subcommands (get, logs)");
+
+  // vi session send <jobId> [text]
+  session
+    .command("send <jobId> [text]")
+    .description("Send text input (or a key) to a running session")
+    .option("--key <key>", "Send a special key instead of text (supported: escape)")
+    .option("--no-submit", "Do not press Enter after text (ignored when --key is used)")
+    .option("--json", "Output the updated job as JSON")
+    .action(async (jobId: string, text: string | undefined, opts: { key?: string; submit: boolean; json?: boolean }) => {
+      guardReadOnly();
+
+      if (!opts.key && !text) {
+        exit(ExitCode.USER_ERROR, "provide <text> or --key <key>");
+      }
+      if (opts.key && opts.key !== "escape") {
+        exit(ExitCode.USER_ERROR, `unsupported key: "${opts.key}". Supported: escape`);
+      }
+
+      const { jobs } = await withRelay(() => getClient().getRemoteApprovalOverview());
+      const job = jobs.find((j) => j.jobId === jobId);
+
+      if (!job) {
+        exit(ExitCode.NOT_FOUND, `session not found: ${jobId}`);
+      }
+
+      if (job.status === "completed" || job.status === "failed") {
+        process.stderr.write(
+          `Warning: session ${short(jobId, 22)} has status "${job.status}" — input may not be delivered.\n`,
+        );
+      }
+
+      const payload: { text: string; submit?: boolean; key?: "escape" } =
+        opts.key === "escape"
+          ? { text: "", key: "escape" }
+          : { text: text!, submit: opts.submit };
+
+      const updated = await withRelay(() => getClient().sendJobInput(jobId, payload));
+
+      if (opts.json) {
+        printJson(updated);
+        return;
+      }
+
+      process.stdout.write(`Input queued for session ${short(jobId, 22)}.\n`);
+    });
 
   // vi session get <jobId>
   session
