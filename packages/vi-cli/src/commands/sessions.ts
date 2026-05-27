@@ -47,6 +47,68 @@ export function registerSessionCommands(program: Command): void {
     .command("session")
     .description("Session subcommands (get, logs)");
 
+  // vi session create
+  session
+    .command("create")
+    .description("Start an interactive Claude session on a remote agent")
+    .requiredOption("--agent <agentId>", "Agent (machine) ID to run the session on")
+    .option("--cwd <path>", "Working directory on the remote machine")
+    .option("--goal <text>", "Initial prompt — injected as /goal after startup, not a positional arg")
+    .option("--model <model>", "Claude model override (e.g. claude-opus-4-7)")
+    .option("--title <title>", "Session title shown in the dashboard")
+    .option("--json", "Output the created job as JSON")
+    .action(
+      async (opts: {
+        agent: string;
+        cwd?: string;
+        goal?: string;
+        model?: string;
+        title?: string;
+        json?: boolean;
+      }) => {
+        guardReadOnly();
+
+        // Validate agent exists
+        const { agents } = await withRelay(() => getClient().getRemoteApprovalOverview());
+        const agentExists = agents.some((a) => a.agentId === opts.agent);
+        if (!agentExists) {
+          exit(ExitCode.NOT_FOUND, `agent not found: ${opts.agent}`);
+        }
+
+        // Mirror web dashboard buildProviderCommand() for Claude
+        const command: string[] = ["vi-agent", "claude"];
+        if (opts.cwd?.trim()) command.push("--cwd", opts.cwd.trim());
+        if (opts.model?.trim()) command.push("--", "--model", opts.model.trim());
+
+        const title = opts.title?.trim() || "Start Claude Code via bridge";
+
+        // Goal goes in env — never as a positional arg (that triggers one-shot exit)
+        const env: Record<string, string> = { VI_SESSION_TITLE: title };
+        if (opts.goal?.trim()) env["VI_INITIAL_GOAL"] = opts.goal.trim();
+
+        const job = await withRelay(() =>
+          getClient().createRemoteAgentJob({
+            agentId: opts.agent,
+            title,
+            command,
+            cwd: opts.cwd?.trim(),
+            env,
+            model: opts.model?.trim() ?? null,
+          }),
+        );
+
+        if (opts.json) {
+          printJson(job);
+          return;
+        }
+
+        process.stdout.write(`Session created: ${job.jobId}\n`);
+        process.stdout.write(`Agent  : ${short(job.agentId, 22)}\n`);
+        if (job.cwd) process.stdout.write(`CWD    : ${job.cwd}\n`);
+        process.stdout.write(`Status : ${job.status}\n`);
+      },
+    );
+
   // vi session send <jobId> [text]
   session
     .command("send <jobId> [text]")
