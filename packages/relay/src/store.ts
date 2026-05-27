@@ -219,6 +219,7 @@ function serializeApproval(row: ApprovalRow) {
 function serializeInput(row: InputRow) {
   return {
     inputId: row.input_id,
+    jobId: row.job_id,
     text: row.text,
     submit: row.submit === 1,
     key: (row.key as "escape" | undefined) ?? undefined,
@@ -444,12 +445,25 @@ export function pollAgent(agentId: string) {
     );
   }
 
+  // Group inputs by jobId so they can be nested inside each job object.
+  // vi-agent's send_pending_inputs() reads job.pendingInputs from the per-job dict.
+  const inputsByJobId = new Map<string, InputRow[]>();
+  for (const row of pendingInputRows) {
+    const list = inputsByJobId.get(row.job_id) ?? [];
+    list.push(row);
+    inputsByJobId.set(row.job_id, list);
+  }
+
   return {
     agent: serializeAgent(db.prepare("SELECT * FROM agents WHERE agent_id = ?").get(agentId) as AgentRow),
     pendingRequests: approvals.filter((r) => r.status === "open").map(serializeApproval),
     resolvedRequests: approvals.filter((r) => r.status !== "open").map(serializeApproval),
     pendingJobs: pendingJobs.map(serializeJob),
-    jobs: activeJobs.map(serializeJob),
+    jobs: activeJobs.map((job) => {
+      const inputs = inputsByJobId.get(job.job_id) ?? [];
+      const serialized = serializeJob(job);
+      return inputs.length > 0 ? { ...serialized, pendingInputs: inputs.map(serializeInput) } : serialized;
+    }),
     removedJobIds: removedJobRows.map((r) => r.job_id),
     controlCommands: pendingCmds.map((c) => ({ commandId: c.command_id, agentId, type: c.type, status: "delivered", createdAt: c.created_at, deliveredAt: t })),
     pendingInputs: pendingInputRows.map(serializeInput),

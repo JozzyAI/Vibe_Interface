@@ -2967,11 +2967,25 @@ def run_daemon(args: argparse.Namespace) -> int:
                             **handoff_payload(artifact_dir),
                         )
 
-            jobs_by_id = {
-                job.get("jobId"): job
-                for job in polled.get("jobs", [])
-                if isinstance(job, dict) and isinstance(job.get("jobId"), str)
-            }
+            # Build per-job lookup, merging top-level pendingInputs (which include jobId
+            # since relay v2) into each job dict so send_pending_inputs() finds them.
+            top_level_inputs: dict[str, list[dict[str, Any]]] = {}
+            for inp in polled.get("pendingInputs", []):
+                jid = inp.get("jobId") if isinstance(inp, dict) else None
+                if isinstance(jid, str):
+                    top_level_inputs.setdefault(jid, []).append(inp)
+
+            jobs_by_id: dict[str | None, dict[str, Any]] = {}
+            for job in polled.get("jobs", []):
+                if not isinstance(job, dict):
+                    continue
+                jid = job.get("jobId")
+                if not isinstance(jid, str):
+                    continue
+                # Merge top-level inputs into job dict if not already present per-job
+                if top_level_inputs.get(jid) and not job.get("pendingInputs"):
+                    job = {**job, "pendingInputs": top_level_inputs[jid]}
+                jobs_by_id[jid] = job
 
             for job_id, job_state in list(launched_jobs.items()):
                 log_path = job_state["logPath"]
