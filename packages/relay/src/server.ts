@@ -88,8 +88,15 @@ export function createRelayServer(): RelayServer {
   const tokens = loadRelayTokens();
 
   const httpServer = createServer(async (req, res) => {
+    const reqStart = Date.now();
     const url = new URL(req.url ?? "/", "http://localhost");
     const { pathname } = url;
+
+    res.on("finish", () => {
+      if (pathname !== "/health") {
+        console.log(`[http] ${req.method} ${pathname} ${res.statusCode} ${Date.now() - reqStart}ms`);
+      }
+    });
 
     // ── Health (public, minimal info) ─────────────────────────────────────
     if (pathname === "/health") {

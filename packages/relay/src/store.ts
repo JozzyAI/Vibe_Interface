@@ -1007,21 +1007,28 @@ export function requestDaemonRestart(agentId: string) {
 export function getOverview() {
   const db = getDb();
   const t = now();
+  const t0 = Date.now();
 
+  const t_agents0 = Date.now();
   const agents = (db.prepare("SELECT * FROM agents ORDER BY last_seen_at DESC").all() as AgentRow[]).map((row) => {
     const openCount = (db.prepare(
       "SELECT COUNT(*) AS cnt FROM approval_requests WHERE agent_id = ? AND status = 'open'",
     ).get(row.agent_id) as { cnt: number }).cnt;
     return { ...serializeAgent(row), pendingApprovalCount: openCount };
   });
+  const t_agents = Date.now() - t_agents0;
 
+  const t_requests0 = Date.now();
   const requests = db.prepare(
     "SELECT * FROM approval_requests ORDER BY created_at DESC LIMIT 500",
   ).all() as ApprovalRow[];
+  const t_requests = Date.now() - t_requests0;
 
+  const t_jobs0 = Date.now();
   const jobs = db.prepare(
     "SELECT * FROM jobs WHERE archived_at IS NULL ORDER BY created_at DESC LIMIT 500",
   ).all() as JobRow[];
+  const t_jobs = Date.now() - t_jobs0;
 
   const activeEnrollments = db.prepare(
     "SELECT * FROM enrollments WHERE revoked_at IS NULL AND consumed_at IS NULL AND expires_at > ? ORDER BY created_at DESC",
@@ -1031,7 +1038,12 @@ export function getOverview() {
     "SELECT * FROM enrollments ORDER BY created_at DESC LIMIT 12",
   ).all() as EnrollmentRow[];
 
-  return {
+  const t_serialize0 = Date.now();
+  const serializedRequests = requests.map(serializeApproval);
+  const serializedJobs = jobs.map(serializeJob);
+  const t_serialize = Date.now() - t_serialize0;
+
+  const result = {
     generatedAt: t,
     stats: {
       agents: agents.length,
@@ -1040,12 +1052,23 @@ export function getOverview() {
       failed: agents.filter((a) => a.status === "failed").length,
     },
     agents,
-    requests: requests.map(serializeApproval),
-    jobs: jobs.map(serializeJob),
+    requests: serializedRequests,
+    jobs: serializedJobs,
     events: [],
     enrollments: activeEnrollments.map(serializeEnrollment),
     recentEnrollments: recentEnrollments.map(serializeEnrollment),
   };
+
+  const t_json0 = Date.now();
+  const jsonBytes = Buffer.byteLength(JSON.stringify(result), "utf8");
+  const t_json = Date.now() - t_json0;
+
+  const total = Date.now() - t0;
+  console.log(
+    `[overview] total=${total}ms agents=${t_agents}ms(n=${agents.length}) requests=${t_requests}ms(n=${requests.length}) jobs=${t_jobs}ms(n=${jobs.length}) serialize=${t_serialize}ms json=${t_json}ms payload=${(jsonBytes / 1024).toFixed(1)}KB`,
+  );
+
+  return result;
 }
 
 // ── Helpers for relay URL derivation ─────────────────────────────────────────

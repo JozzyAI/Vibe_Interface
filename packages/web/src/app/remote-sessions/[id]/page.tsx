@@ -26,11 +26,14 @@ export default async function RemoteSessionPage(props: {
 }) {
   const params = await props.params;
   const workspaceRoot = getVIIdeaExecutionRoot();
+  const ssr0 = Date.now();
   const [pageData, remoteOverview, workspaceFiles] = await Promise.all([
     getDashboardPageData("all"),
     getRemoteApprovalOverview(),
     readVIWorkspaceFiles(workspaceRoot),
   ]);
+  console.log(`[remote-session-ssr] parallel fetch done in ${Date.now() - ssr0}ms (projects=${pageData.projects.length})`);
+  const cards0 = Date.now();
   const cards = await Promise.all(
     pageData.projects.map(async (project: { id: string; name: string; sessionPrefix?: string }) => {
       const projectPageData = await getDashboardPageData(project.id);
@@ -45,6 +48,7 @@ export default async function RemoteSessionPage(props: {
       };
     }),
   );
+  console.log(`[remote-session-ssr] per-project fan-out done in ${Date.now() - cards0}ms total=${Date.now() - ssr0}ms`);
   const connectedCount = remoteOverview.agents.filter(
     (agent) => agent.connectionState === "connected",
   ).length;
