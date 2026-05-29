@@ -3,7 +3,9 @@ import type { RemoteAgentJob } from "@vi/client-sdk";
 import { getClient } from "../client.js";
 import { withRelay, exit, guardReadOnly, ExitCode } from "../exit.js";
 import { printTable, printJson, ago, short } from "../format.js";
-import { resolveSkill, composeGoal } from "../skill.js";
+import { resolveSkill, loadAllSkills } from "../skill.js";
+import { recommendSkills } from "../recommend.js";
+import { promptYN } from "./skills.js";
 
 export function registerSessionCommands(program: Command): void {
   // vi sessions
@@ -57,7 +59,14 @@ export function registerSessionCommands(program: Command): void {
     .option("--goal <text>", "Initial prompt — injected as /goal after startup, not a positional arg")
     .option("--model <model>", "Claude model override (e.g. claude-opus-4-7)")
     .option("--title <title>", "Session title shown in the dashboard")
-    .option("--skill <name>", "Inject a skill pack as initial prompt context (see: vi skills list)")
+    .option(
+      "--skill [name]",
+      "Inject a skill pack (repeatable: --skill a --skill b; see vi skills list)",
+      (v: string, acc: string[]) => [...acc, v],
+      [] as string[],
+    )
+    .option("--auto-skill", "Automatically recommend installed skills based on --goal (TTY: prompts; non-TTY: requires --yes)")
+    .option("--yes", "Auto-confirm --auto-skill recommendations without prompting")
     .option("--json", "Output the created job as JSON")
     .action(
       async (opts: {
@@ -66,10 +75,17 @@ export function registerSessionCommands(program: Command): void {
         goal?: string;
         model?: string;
         title?: string;
-        skill?: string;
+        skill: string[];
+        autoSkill?: boolean;
+        yes?: boolean;
         json?: boolean;
       }) => {
         guardReadOnly();
+
+        // Mutual exclusivity: --auto-skill and --skill can't both be used
+        if (opts.autoSkill && opts.skill.length > 0) {
+          exit(ExitCode.USER_ERROR, "--auto-skill and --skill are mutually exclusive");
+        }
 
         // Validate agent exists
         const { agents } = await withRelay(() => getClient().getRemoteApprovalOverview());
@@ -85,15 +101,63 @@ export function registerSessionCommands(program: Command): void {
 
         const title = opts.title?.trim() || "Start Claude Code via bridge";
 
-        // Compose VI_INITIAL_GOAL: inject skill pack when --skill is given,
-        // otherwise pass goal as-is (no-skill path is byte-for-byte identical).
-        let initialGoal: string | undefined = opts.goal?.trim();
-        if (opts.skill) {
-          const skill = resolveSkill(opts.skill);
-          if (!skill) {
-            exit(ExitCode.NOT_FOUND, `skill not found: ${opts.skill}`);
+        // Resolve which skill names to inject
+        let skillNames: string[] = opts.skill;
+
+        if (opts.autoSkill) {
+          const all = loadAllSkills();
+          const recs = recommendSkills(opts.goal ?? "", all, 3).filter((r) => r.score >= 0.10);
+
+          if (recs.length === 0) {
+            process.stderr.write("(no matching skills found — proceeding without skill)\n");
+          } else {
+            process.stderr.write("Recommended skills:\n");
+            for (const r of recs) {
+              process.stderr.write(
+                `  ${r.name.padEnd(24)} score: ${r.score.toFixed(2)}  (${r.matchedOn.slice(0, 3).join(", ")})\n`,
+              );
+            }
+
+            let useSkills = false;
+            if (opts.yes) {
+              process.stderr.write("  → auto-selected (--yes)\n");
+              useSkills = true;
+            } else if (process.stdin.isTTY) {
+              useSkills = await promptYN("Use these skills?");
+            } else {
+              process.stderr.write("  → add --yes to auto-select in non-TTY context\n");
+            }
+
+            if (useSkills) skillNames = recs.map((r) => r.name);
           }
-          initialGoal = composeGoal(skill, opts.goal);
+        }
+
+        // Compose VI_INITIAL_GOAL from skill(s) + goal
+        let initialGoal: string | undefined = opts.goal?.trim();
+
+        if (skillNames.length > 0) {
+          const resolvedSkills = skillNames.map((name) => {
+            const skill = resolveSkill(name);
+            if (!skill) exit(ExitCode.NOT_FOUND, `skill not found: ${name}`);
+            return skill;
+          });
+
+          if (resolvedSkills.length === 1) {
+            // Single skill: use composeGoal format for compatibility
+            const s = resolvedSkills[0];
+            const header = `[SKILL: ${s.meta.name}]`;
+            const instructions = s.instructions.trimEnd();
+            initialGoal = opts.goal?.trim()
+              ? `${header}\n${instructions}\n\n--- Goal ---\n${opts.goal.trim()}`
+              : `${header}\n${instructions}`;
+          } else {
+            // Multi-skill: matching dashboard composition
+            const skillParts = resolvedSkills
+              .map((s) => `[SKILL: ${s.name}]\n${s.instructions.trimEnd()}`)
+              .join("\n\n---\n\n");
+            const goalPart = opts.goal?.trim() ? `\n\n--- Goal ---\n${opts.goal.trim()}` : "";
+            initialGoal = skillParts + goalPart;
+          }
         }
 
         // Goal goes in env — never as a positional arg (that triggers one-shot exit)
@@ -119,6 +183,7 @@ export function registerSessionCommands(program: Command): void {
         process.stdout.write(`Session created: ${job.jobId}\n`);
         process.stdout.write(`Agent  : ${short(job.agentId, 22)}\n`);
         if (job.cwd) process.stdout.write(`CWD    : ${job.cwd}\n`);
+        if (skillNames.length > 0) process.stdout.write(`Skills : ${skillNames.join(", ")}\n`);
         process.stdout.write(`Status : ${job.status}\n`);
       },
     );

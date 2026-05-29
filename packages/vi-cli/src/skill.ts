@@ -129,6 +129,35 @@ function loadSkillFromDir(skillDir: string, name: string, baseSource: "project" 
   };
 }
 
+// Returns all installed skills as full Skill objects (with instructions loaded).
+// Same discovery order as listSkills() but includes full Skill data for scoring.
+export function loadAllSkills(): Skill[] {
+  const results: Skill[] = [];
+  const seen = new Set<string>();
+
+  const projectDir = findProjectSkillsDir();
+  if (projectDir && fs.existsSync(projectDir)) {
+    for (const entry of fs.readdirSync(projectDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || seen.has(entry.name)) continue;
+      seen.add(entry.name);
+      const skill = loadSkillFromDir(path.join(projectDir, entry.name), entry.name, "project");
+      if (skill) results.push(skill);
+    }
+  }
+
+  const uDir = userSkillsDir();
+  if (fs.existsSync(uDir)) {
+    for (const entry of fs.readdirSync(uDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || seen.has(entry.name)) continue;
+      seen.add(entry.name);
+      const skill = loadSkillFromDir(path.join(uDir, entry.name), entry.name, "user");
+      if (skill) results.push(skill);
+    }
+  }
+
+  return results;
+}
+
 // Resolution order: project .vi/skills > ~/.vi/skills > built-in (none in Phase 1)
 export function resolveSkill(skillName: string): Skill | null {
   const projectDir = findProjectSkillsDir();

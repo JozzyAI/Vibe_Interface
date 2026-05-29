@@ -6,12 +6,22 @@ import { Command } from "commander";
 import {
   resolveSkill,
   listSkills,
+  loadAllSkills,
   warnCredentials,
   parseSkillUrl,
   readSkillLock,
   writeSkillLock,
 } from "../skill.js";
-import { printTable, printJson, short } from "../format.js";
+import { recommendSkills } from "../recommend.js";
+import {
+  loadSkillIndex,
+  refreshSkillIndex,
+  clearSkillIndex,
+  searchSkillIndex,
+  INDEX_FILE_PATH,
+  CURATED_SOURCE_COUNT,
+} from "../skillIndex.js";
+import { printTable, printJson, short, ago } from "../format.js";
 import { exit, ExitCode } from "../exit.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -24,7 +34,7 @@ function assertGit(): void {
   }
 }
 
-async function promptYN(question: string): Promise<boolean> {
+export async function promptYN(question: string): Promise<boolean> {
   if (!process.stdin.isTTY) return true; // non-interactive / piped: auto-proceed
   return new Promise((resolve) => {
     process.stdout.write(`${question} [y/N] `);
@@ -460,5 +470,144 @@ export function registerSkillsCommands(program: Command): void {
       for (const issue of issues) {
         process.stdout.write(`  ⚠  ${issue}\n`);
       }
+    });
+
+  // ── vi skills recommend ────────────────────────────────────────────────
+
+  skills
+    .command("recommend")
+    .description("Recommend installed skills that match a task description")
+    .requiredOption("--task <text>", "Task description to match against installed skills")
+    .option("--top <n>", "Maximum results to show (default: 5)", "5")
+    .option("--json", "Output JSON only")
+    .action((opts: { task: string; top: string; json?: boolean }) => {
+      const top = Number.parseInt(opts.top, 10);
+      if (!Number.isInteger(top) || top < 1) {
+        exit(ExitCode.USER_ERROR, "--top must be a positive integer");
+      }
+
+      const all = loadAllSkills();
+      if (all.length === 0) {
+        if (opts.json) { printJson([]); return; }
+        process.stdout.write("No skills installed.\nCreate one with: vi skills init <name>\n");
+        return;
+      }
+
+      const recs = recommendSkills(opts.task, all, top);
+
+      if (opts.json) {
+        printJson(recs);
+        return;
+      }
+
+      process.stdout.write(`Recommended skills for: "${opts.task}"\n\n`);
+
+      if (recs.length === 0) {
+        process.stdout.write("(no matching skills)\n");
+        return;
+      }
+
+      for (let i = 0; i < recs.length; i++) {
+        const r = recs[i];
+        const badge = r.source === "project" ? "[project]" : r.source === "remote" ? "[remote] " : "[user]   ";
+        process.stdout.write(
+          `${(i + 1).toString().padStart(2)}. ${r.name.padEnd(24)} ${badge}  score: ${r.score.toFixed(2)}\n`,
+        );
+        process.stdout.write(`    Matched: ${r.matchedOn.slice(0, 5).join(", ")}\n`);
+        if (r.description) process.stdout.write(`    ${r.description}\n`);
+        process.stdout.write("\n");
+      }
+    });
+
+  // ── vi skills search "<query>" ─────────────────────────────────────────
+
+  skills
+    .command("search <query>")
+    .description("Search curated GitHub sources for candidate skills (report only — no install)")
+    .option("--json", "Output JSON only")
+    .action(async (query: string, opts: { json?: boolean }) => {
+      let { index, staleSeconds } = loadSkillIndex();
+
+      // Auto-refresh if missing; warn if stale but use the cache
+      if (!index) {
+        process.stderr.write("No skill index found — fetching from curated sources...\n");
+        index = await refreshSkillIndex((msg) => process.stderr.write(`${msg}\n`));
+      } else if (staleSeconds !== null) {
+        const hours = Math.round(staleSeconds / 3600);
+        process.stderr.write(`Index is ${hours}h stale — run vi skills index refresh to update\n`);
+      }
+
+      const results = searchSkillIndex(query, index.skills);
+
+      if (opts.json) {
+        printJson(results);
+        return;
+      }
+
+      process.stdout.write(`Candidates for: "${query}"\n\n`);
+
+      if (results.length === 0) {
+        process.stdout.write("(no matching candidates)\n");
+        return;
+      }
+
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        process.stdout.write(
+          `${(i + 1).toString().padStart(2)}. ${short(r.name, 24).padEnd(24)}  ${r.sourceRepo}  score: ${r.score.toFixed(2)}\n`,
+        );
+        if (r.description) process.stdout.write(`    ${r.description}\n`);
+        if (r.riskNotes.length > 0) process.stdout.write(`    ⚠  ${r.riskNotes.join("; ")}\n`);
+        process.stdout.write(`    → vi skills add ${r.addUrl}\n`);
+        process.stdout.write("\n");
+      }
+    });
+
+  // ── vi skills index ────────────────────────────────────────────────────
+
+  const skillIndex = skills
+    .command("index")
+    .description("Manage the remote skill discovery index");
+
+  skillIndex
+    .command("refresh")
+    .description(`Re-fetch all ${CURATED_SOURCE_COUNT} curated sources and rebuild the index`)
+    .action(async () => {
+      process.stdout.write("Refreshing skill index...\n");
+      const index = await refreshSkillIndex((msg) => process.stdout.write(`${msg}\n`));
+      process.stdout.write(`\nDone. ${index.skills.length} skills indexed.\n`);
+      process.stdout.write(`Saved to: ${INDEX_FILE_PATH}\n`);
+    });
+
+  skillIndex
+    .command("clear")
+    .description("Delete the local skill index cache")
+    .action(() => {
+      const deleted = clearSkillIndex();
+      process.stdout.write(deleted ? "Skill index cleared.\n" : "No index file found.\n");
+    });
+
+  skillIndex
+    .command("status")
+    .description("Show skill index cache status")
+    .action(() => {
+      const { index, staleSeconds } = loadSkillIndex();
+      if (!index) {
+        process.stdout.write("No index. Run: vi skills index refresh\n");
+        return;
+      }
+      const freshStatus = staleSeconds !== null ? "stale" : "fresh";
+      process.stdout.write(`Index status: ${freshStatus}\n`);
+      process.stdout.write(`Refreshed:    ${index.refreshedAt} (${ago(index.refreshedAt)})\n`);
+      process.stdout.write(`Skills:       ${index.skills.length} total\n`);
+
+      const bySrc = new Map<string, number>();
+      for (const s of index.skills) {
+        bySrc.set(s.sourceRepo, (bySrc.get(s.sourceRepo) ?? 0) + 1);
+      }
+      for (const [src, count] of bySrc) {
+        process.stdout.write(`  ${src.padEnd(50)} ${count}\n`);
+      }
+      process.stdout.write(`File:         ${INDEX_FILE_PATH}\n`);
     });
 }
