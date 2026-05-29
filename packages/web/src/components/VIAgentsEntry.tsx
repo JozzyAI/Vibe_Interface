@@ -6,6 +6,7 @@ const VI_SERVER_ORIGIN = "http://192.168.1.83:3000";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useOverviewPolling } from "@/hooks/useOverviewPolling";
 import type {
   RemoteAgentJob,
   RemoteAgentSessionHistoryItem,
@@ -159,6 +160,8 @@ export function VIAgentsEntry({ initialRemoteOverview, selectedAgentId, view = "
   useEffect(() => {
     setOverview(initialRemoteOverview);
   }, [initialRemoteOverview]);
+
+  useOverviewPolling({ level: 1, slim: true, onData: setOverview });
 
   useEffect(() => {
     setBrowserOrigin(VI_SERVER_ORIGIN);

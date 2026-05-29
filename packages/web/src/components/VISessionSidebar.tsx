@@ -1,4 +1,19 @@
+"use client";
+
+import { useState } from "react";
+import { useOverviewPolling } from "@/hooks/useOverviewPolling";
 import type { VIApprovalHubData, RemoteAgentJob, RemoteApprovalOverview } from "@/lib/types";
+
+const EMPTY_OVERVIEW: RemoteApprovalOverview = {
+  generatedAt: "",
+  stats: { agents: 0, running: 0, pending: 0, failed: 0 },
+  agents: [],
+  requests: [],
+  jobs: [],
+  events: [],
+  enrollments: [],
+  recentEnrollments: [],
+};
 
 // Strip ANSI escape sequences so logTail pattern matching works on plain text.
 const ANSI_STRIP_RE = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)|\x1b[PX^_].*?\x1b\\|\x1b[@-_]/gs;
@@ -87,7 +102,6 @@ interface ProjectHubCard {
 
 interface Props {
   cards: ProjectHubCard[];
-  remoteOverview: RemoteApprovalOverview;
   activeHref?: string;
 }
 
@@ -126,7 +140,9 @@ export function getVISessionSidebarCount(cards: ProjectHubCard[], remoteOverview
   return remoteOverview.jobs.length + cards.reduce((count, card) => count + card.hub.fleet.length, 0);
 }
 
-export function VISessionSidebar({ cards, remoteOverview, activeHref }: Props) {
+export function VISessionSidebar({ cards, activeHref }: Props) {
+  const [remoteOverview, setRemoteOverview] = useState<RemoteApprovalOverview>(EMPTY_OVERVIEW);
+  useOverviewPolling({ level: 1, onData: setRemoteOverview });
   const remoteSessionItems = remoteOverview.jobs.map((job) => {
     const href = `/remote-sessions/${encodeURIComponent(job.jobId)}`;
     const pendingApprovalCount = remoteOverview.requests.filter(

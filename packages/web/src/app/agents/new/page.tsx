@@ -4,8 +4,13 @@ import { VIWorkspaceShell } from "@/components/VIWorkspaceShell";
 import { getDashboardPageData } from "@/lib/dashboard-page-data";
 import { getVIIdeaExecutionRoot } from "@/lib/vi-ideas";
 import { readVIWorkspaceFiles } from "@/lib/vi-workspace-files";
-import { getRemoteApprovalOverview } from "@/lib/backend";
-import type { RemoteAgentSummary } from "@/lib/types";
+import type { RemoteAgentSummary, RemoteApprovalOverview } from "@/lib/types";
+
+const EMPTY_OVERVIEW: RemoteApprovalOverview = {
+  generatedAt: "",
+  stats: { agents: 0, running: 0, pending: 0, failed: 0 },
+  agents: [], requests: [], jobs: [], events: [], enrollments: [], recentEnrollments: [],
+};
 
 export const dynamic = "force-dynamic";
 
@@ -84,13 +89,7 @@ function MachineSidebar({ agents }: { agents: RemoteAgentSummary[] }) {
 export default async function AddMachinePage() {
   const pageData = await getDashboardPageData("all");
   const workspaceRoot = getVIIdeaExecutionRoot();
-  const [remoteOverview, workspaceFiles] = await Promise.all([
-    getRemoteApprovalOverview(),
-    readVIWorkspaceFiles(workspaceRoot),
-  ]);
-  const connectedCount = remoteOverview.agents.filter(
-    (agent) => agent.connectionState === "connected",
-  ).length;
+  const workspaceFiles = await readVIWorkspaceFiles(workspaceRoot);
 
   return (
     <VIWorkspaceShell
@@ -99,13 +98,12 @@ export default async function AddMachinePage() {
       subtitle="Create a one-time pairing code for a computer or server running Codex CLI or Claude Code."
       projectName={pageData.projectName}
       projects={pageData.projects}
-      connectedCount={connectedCount}
+      connectedCount={0}
       workspaceRoot={workspaceRoot}
       workspaceFiles={workspaceFiles}
-      sidebarContent={<MachineSidebar agents={remoteOverview.agents} />}
-      sidebarFooter={`${connectedCount} online / ${remoteOverview.agents.length} known`}
+      sidebarContent={<MachineSidebar agents={[]} />}
     >
-      <VIAgentsEntry initialRemoteOverview={remoteOverview} view="new" />
+      <VIAgentsEntry initialRemoteOverview={EMPTY_OVERVIEW} view="new" />
     </VIWorkspaceShell>
   );
 }

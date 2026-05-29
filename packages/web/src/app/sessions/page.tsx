@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
 import { VIApprovalInbox } from "@/components/VIApprovalInbox";
-import { getVISessionSidebarCount, VISessionSidebar } from "@/components/VISessionSidebar";
+import { VISessionSidebar } from "@/components/VISessionSidebar";
 import { VIWorkspaceShell } from "@/components/VIWorkspaceShell";
 import { getDashboardPageData } from "@/lib/dashboard-page-data";
 import { getVIApprovalHubData } from "@/lib/vi-approval-hub";
 import { getVIIdeaExecutionRoot } from "@/lib/vi-ideas";
 import { readVIWorkspaceFiles } from "@/lib/vi-workspace-files";
-import { getRemoteApprovalOverview } from "@/lib/backend";
+import type { RemoteApprovalOverview } from "@/lib/types";
+
+const EMPTY_OVERVIEW: RemoteApprovalOverview = {
+  generatedAt: "",
+  stats: { agents: 0, running: 0, pending: 0, failed: 0 },
+  agents: [], requests: [], jobs: [], events: [], enrollments: [], recentEnrollments: [],
+};
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +24,8 @@ export const metadata: Metadata = {
 
 export default async function SessionsPage() {
   const workspaceRoot = getVIIdeaExecutionRoot();
-  const [pageData, remoteOverview, workspaceFiles] = await Promise.all([
+  const [pageData, workspaceFiles] = await Promise.all([
     getDashboardPageData("all"),
-    getRemoteApprovalOverview(),
     readVIWorkspaceFiles(workspaceRoot),
   ]);
   const cards = await Promise.all(
@@ -37,17 +42,21 @@ export default async function SessionsPage() {
       };
     }),
   );
-  const connectedCount = remoteOverview.agents.filter(
-    (agent) => agent.connectionState === "connected",
-  ).length;
-  const sessionCount = getVISessionSidebarCount(cards, remoteOverview);
-  const needsCount =
-    cards.reduce((total: number, card: { hub?: { stats?: { inbox?: number; failed?: number; running?: number } } }) => total + (card.hub?.stats?.inbox ?? 0) + (card.hub?.stats?.failed ?? 0), 0) +
-    remoteOverview.stats.pending +
-    remoteOverview.stats.failed;
-  const runningCount =
-    cards.reduce((total: number, card: { hub?: { stats?: { running?: number } } }) => total + (card.hub?.stats?.running ?? 0), 0) +
-    remoteOverview.stats.running;
+  const needsCount = cards.reduce(
+    (total: number, card: { hub?: { stats?: { inbox?: number; failed?: number } } }) =>
+      total + (card.hub?.stats?.inbox ?? 0) + (card.hub?.stats?.failed ?? 0),
+    0,
+  );
+  const runningCount = cards.reduce(
+    (total: number, card: { hub?: { stats?: { running?: number } } }) =>
+      total + (card.hub?.stats?.running ?? 0),
+    0,
+  );
+  const sessionCount = cards.reduce(
+    (total: number, card: { hub?: { fleet?: unknown[] } }) =>
+      total + (card.hub?.fleet?.length ?? 0),
+    0,
+  );
 
   return (
     <VIWorkspaceShell
@@ -56,10 +65,10 @@ export default async function SessionsPage() {
       subtitle="One place for running work, blocked approvals, failed sessions, and live CLI access."
       projectName={pageData.projectName}
       projects={pageData.projects}
-      connectedCount={connectedCount}
+      connectedCount={0}
       workspaceRoot={workspaceRoot}
       workspaceFiles={workspaceFiles}
-      sidebarContent={<VISessionSidebar cards={cards} remoteOverview={remoteOverview} />}
+      sidebarContent={<VISessionSidebar cards={cards} />}
       sidebarFooter={`${sessionCount} session${sessionCount === 1 ? "" : "s"} shown`}
       rightSidebarTitle="Sessions"
       rightSidebarContent={
@@ -89,7 +98,7 @@ export default async function SessionsPage() {
               ))}
             </div>
             <div className="mt-5 space-y-2 rounded-2xl bg-[#f5f3f0] p-3 text-[12px] leading-5 text-[#626873]">
-              <p>{connectedCount} machine{connectedCount === 1 ? "" : "s"} online</p>
+              <p>machines online</p>
               <p>{cards.length} project{cards.length === 1 ? "" : "s"} tracked</p>
               <p className="truncate">root: {workspaceRoot}</p>
             </div>
@@ -98,7 +107,7 @@ export default async function SessionsPage() {
       }
       hideHeader
     >
-      <VIApprovalInbox initialCards={cards} initialRemoteOverview={remoteOverview} hideSummary />
+      <VIApprovalInbox initialCards={cards} initialRemoteOverview={EMPTY_OVERVIEW} hideSummary />
     </VIWorkspaceShell>
   );
 }

@@ -4,8 +4,13 @@ import { VIWorkspaceShell } from "@/components/VIWorkspaceShell";
 import { getDashboardPageData } from "@/lib/dashboard-page-data";
 import { getVIIdeaExecutionRoot } from "@/lib/vi-ideas";
 import { readVIWorkspaceFiles } from "@/lib/vi-workspace-files";
-import { getRemoteApprovalOverview } from "@/lib/backend";
-import type { RemoteAgentSummary } from "@/lib/types";
+import type { RemoteAgentSummary, RemoteApprovalOverview } from "@/lib/types";
+
+const EMPTY_OVERVIEW: RemoteApprovalOverview = {
+  generatedAt: "",
+  stats: { agents: 0, running: 0, pending: 0, failed: 0 },
+  agents: [], requests: [], jobs: [], events: [], enrollments: [], recentEnrollments: [],
+};
 
 export const dynamic = "force-dynamic";
 
@@ -116,15 +121,11 @@ export default async function AgentsPage(props: {
   searchParams?: Promise<{ machine?: string }>;
 }) {
   const workspaceRoot = getVIIdeaExecutionRoot();
-  const [searchParams, pageData, remoteOverview, workspaceFiles] = await Promise.all([
+  const [searchParams, pageData, workspaceFiles] = await Promise.all([
     props.searchParams,
     getDashboardPageData("all"),
-    getRemoteApprovalOverview(),
     readVIWorkspaceFiles(workspaceRoot),
   ]);
-  const connectedCount = remoteOverview.agents.filter(
-    (agent) => agent.connectionState === "connected",
-  ).length;
 
   return (
     <VIWorkspaceShell
@@ -133,20 +134,19 @@ export default async function AgentsPage(props: {
       subtitle="Connect computers and servers, then inspect each machine's current sessions and resumable history."
       projectName={pageData.projectName}
       projects={pageData.projects}
-      connectedCount={connectedCount}
+      connectedCount={0}
       workspaceRoot={workspaceRoot}
       workspaceFiles={workspaceFiles}
       sidebarContent={
         <MachineSidebar
-          agents={remoteOverview.agents}
-          selectedAgentId={searchParams?.machine ?? remoteOverview.agents[0]?.agentId}
+          agents={[]}
+          selectedAgentId={searchParams?.machine}
           activeAdd={false}
         />
       }
-      sidebarFooter={`${connectedCount} online / ${remoteOverview.agents.length} known`}
     >
       <VIAgentsEntry
-        initialRemoteOverview={remoteOverview}
+        initialRemoteOverview={EMPTY_OVERVIEW}
         selectedAgentId={searchParams?.machine}
       />
     </VIWorkspaceShell>
