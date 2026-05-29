@@ -263,76 +263,88 @@ if ! $DRY_RUN; then
 fi
 
 # ──────────────────────────────────────────────────────────────────────────
-#  STEP 7 — First log check
+#  STEP 7 — Poll logs until SKILL_ACTIVE appears
 # ──────────────────────────────────────────────────────────────────────────
 
-step 7 "vi session logs — first look"
-echo "Give Claude a few seconds to process the initial goal, then check for the SKILL_ACTIVE marker."
+step 7 "vi session logs — wait for SKILL_ACTIVE marker"
+echo "Poll logs every 5s (up to 60s) until SKILL_ACTIVE appears."
+echo "Expected: 'SKILL_ACTIVE: smoke test passed.' printed by Claude."
 echo ""
 
-if ! $DRY_RUN; then
-  sleep 6
-  LOGS=$($VI session logs "$JOB_ID")
-  echo "$LOGS"
-  echo ""
+SKILL_ACTIVE_FOUND=false
 
-  if echo "$LOGS" | grep -q "SKILL_ACTIVE"; then
-    ok "SKILL_ACTIVE marker found in logs ✓"
-  else
-    warn "SKILL_ACTIVE not yet visible — session may still be processing"
+if ! $DRY_RUN; then
+  for i in $(seq 1 12); do
+    LOGS=$($VI session logs "$JOB_ID" 2>/dev/null || true)
+    if echo "$LOGS" | grep -q "SKILL_ACTIVE"; then
+      SKILL_ACTIVE_FOUND=true
+      ok "SKILL_ACTIVE marker found (attempt $i) ✓"
+      echo "$LOGS"
+      break
+    fi
+    echo "  attempt $i/12 — not yet, retrying in 5s…"
+    sleep 5
+  done
+
+  if ! $SKILL_ACTIVE_FOUND; then
+    fail "SKILL_ACTIVE never appeared in logs after 60s"
+    echo "  Final log tail:"
+    $VI session logs "$JOB_ID" 2>/dev/null || true
+    exit 1
   fi
+else
+  echo "${DIM}[dry-run] would poll logs for SKILL_ACTIVE${RESET}"
 fi
 
 # ──────────────────────────────────────────────────────────────────────────
-#  STEP 8 — Wait for input prompt or completion
+#  STEP 8 — Confirm session is at an input-ready state
 # ──────────────────────────────────────────────────────────────────────────
 
-step 8 "vi session wait — running → waiting_input | completed | failed"
-echo "Claude finishes its initial response and either pauses for input or completes."
-echo "Expected: matched state printed, exit 0."
+step 8 "vi session wait — confirm session is at prompt"
+# Note: sessions using VI_INITIAL_GOAL enter plan mode via /plan injection.
+# In plan mode, providerState stays 'busy' at the input prompt (not 'waiting_input').
+# We therefore accept 'busy' as an input-ready state when SKILL_ACTIVE is confirmed.
+echo "Accepts: waiting_input, busy (plan mode at prompt), completed, failed."
 echo ""
 
 MATCHED_STATE=""
 
-cmd "$VI session wait \$JOB_ID --until waiting_input,completed,failed --timeout $TIMEOUT_INPUT --json"
+cmd "$VI session wait \$JOB_ID --until waiting_input,busy,completed,failed --timeout 30 --json"
 if ! $DRY_RUN; then
   WAIT_JSON=$($VI session wait "$JOB_ID" \
-    --until waiting_input,completed,failed \
-    --timeout "$TIMEOUT_INPUT" \
+    --until waiting_input,busy,completed,failed \
+    --timeout 30 \
     --json)
 
   MATCHED_STATE=$(echo "$WAIT_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['matchedState'])")
-  ok "Session reached: $MATCHED_STATE"
+  ok "Session state: $MATCHED_STATE"
+
+  if [[ "$MATCHED_STATE" == "busy" ]]; then
+    echo "  (plan mode — session is at input prompt, providerState reports 'busy')"
+  fi
 fi
 
 # ──────────────────────────────────────────────────────────────────────────
-#  STEP 9 — Send follow-up (only if waiting for input)
+#  STEP 9 — Send follow-up
 # ──────────────────────────────────────────────────────────────────────────
 
 step 9 "vi session send — follow-up message"
+echo "Send input to the running session. Works in both plan mode and interactive mode."
+echo ""
 
 if ! $DRY_RUN; then
-  if [[ "$MATCHED_STATE" == "waiting_input" ]]; then
-    echo "Session is paused for input. Sending: \"$FOLLOW_UP\""
+  if [[ "$MATCHED_STATE" == "completed" || "$MATCHED_STATE" == "failed" ]]; then
+    warn "Session already in terminal state ($MATCHED_STATE) — skipping send"
+  else
+    echo "Sending: \"$FOLLOW_UP\""
     echo ""
 
     cmd "$VI session send \$JOB_ID \"$FOLLOW_UP\""
     $VI session send "$JOB_ID" "$FOLLOW_UP"
-    ok "Input sent"
-
-    echo ""
-    echo "Waiting for session to complete after follow-up..."
-    cmd "$VI session wait \$JOB_ID --until completed,failed --timeout $TIMEOUT_FINAL"
-    $VI session wait "$JOB_ID" --until completed,failed --timeout "$TIMEOUT_FINAL"
-    ok "Session reached terminal state"
-
-  elif [[ "$MATCHED_STATE" == "completed" ]]; then
-    ok "Session already completed — no send needed"
-  else
-    warn "Session ended with state: $MATCHED_STATE — skipping send"
+    ok "Input sent ✓"
   fi
 else
-  echo "${DIM}[dry-run] would send follow-up if session reached waiting_input${RESET}"
+  echo "${DIM}[dry-run] would send: \"$FOLLOW_UP\"${RESET}"
 fi
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -1,3 +1,6 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 import { Command } from "commander";
 import { resolveSkill, listSkills, warnCredentials } from "../skill.js";
 import { printTable, printJson, short } from "../format.js";
@@ -74,6 +77,88 @@ export function registerSkillsCommands(program: Command): void {
       if (skill.instructions.split("\n").length > 15) {
         process.stdout.write("  ... (truncated)\n");
       }
+    });
+
+  // vi skills init <name>
+  skills
+    .command("init <name>")
+    .description("Scaffold a new skill pack with starter files")
+    .option("--project", "Create under <project-root>/.vi/skills/ instead of ~/.vi/skills/")
+    .option("--force", "Overwrite if skill already exists")
+    .action((name: string, opts: { project?: boolean; force?: boolean }) => {
+      if (!/^[a-z0-9][a-z0-9_-]*$/.test(name)) {
+        exit(ExitCode.USER_ERROR, `invalid skill name "${name}" — use lowercase letters, numbers, hyphens, underscores`);
+      }
+
+      // Determine target directory
+      let skillDir: string;
+      if (opts.project) {
+        // Walk up to git root or CWD
+        let dir = process.cwd();
+        while (true) {
+          if (fs.existsSync(path.join(dir, ".git"))) break;
+          const parent = path.dirname(dir);
+          if (parent === dir) break;
+          dir = parent;
+        }
+        skillDir = path.join(dir, ".vi", "skills", name);
+      } else {
+        skillDir = path.join(os.homedir(), ".vi", "skills", name);
+      }
+
+      if (fs.existsSync(skillDir) && !opts.force) {
+        exit(ExitCode.USER_ERROR, `skill "${name}" already exists at ${skillDir}\nUse --force to overwrite`);
+      }
+
+      fs.mkdirSync(skillDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(skillDir, "skill.yaml"),
+        [
+          `name: ${name}`,
+          `description: A short description of what this skill does`,
+          `version: "1.0"`,
+          `# allowedTools is display-only — shown in "vi skills show", never enforced`,
+          `# allowedTools:`,
+          `#   - Read`,
+          `#   - Bash`,
+          "",
+        ].join("\n"),
+      );
+
+      fs.writeFileSync(
+        path.join(skillDir, "instructions.md"),
+        [
+          `# ${name}`,
+          "",
+          `<!-- One-line description of what this skill does. -->`,
+          "",
+          `## Role`,
+          "",
+          `You are assisting with <!-- describe the task context -->.`,
+          "",
+          `## Instructions`,
+          "",
+          `<!-- Step-by-step instructions. Be specific — the agent receives this`,
+          `     as its first prompt, before your --goal text. -->`,
+          "",
+          `1. `,
+          "",
+          `## Output format`,
+          "",
+          `<!-- Describe expected output format, length, or structure. -->`,
+          "",
+        ].join("\n"),
+      );
+
+      const source = opts.project ? "project" : "user";
+      process.stdout.write(`Skill "${name}" created (${source}):\n`);
+      process.stdout.write(`  ${path.join(skillDir, "skill.yaml")}\n`);
+      process.stdout.write(`  ${path.join(skillDir, "instructions.md")}\n`);
+      process.stdout.write(`\nNext steps:\n`);
+      process.stdout.write(`  1. Edit ${path.join(skillDir, "instructions.md")}\n`);
+      process.stdout.write(`  2. vi skills validate ${name}\n`);
+      process.stdout.write(`  3. vi session create --skill ${name} --agent <agentId> --goal "..."\n`);
     });
 
   // vi skills validate <name>

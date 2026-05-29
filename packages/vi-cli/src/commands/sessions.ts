@@ -234,8 +234,8 @@ export function registerSessionCommands(program: Command): void {
           process.exit(ExitCode.SUCCESS);
         }
 
-        // Sleep up to 5s, but no longer than the remaining timeout
-        const remaining = timeoutMs - (Date.now() - startMs);
+        // Sleep up to 5s, but no longer than the remaining timeout (clamp to ≥0)
+        const remaining = Math.max(0, timeoutMs - (Date.now() - startMs));
         await new Promise<void>((resolve) => setTimeout(resolve, Math.min(5000, remaining)));
       }
     });

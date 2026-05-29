@@ -178,7 +178,7 @@ export default function SessionDetailScreen() {
         </Section>
       )}
 
-      {/* Send input — stored in relay, delivered to vi-agent on next poll. */}
+      {/* Send input — queued in relay and delivered to vi-agent via WebSocket. */}
       {canSendInput && (
         <Section title="Send Input">
           <Text style={s.partialNote}>
