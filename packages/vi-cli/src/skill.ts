@@ -9,12 +9,29 @@ export interface SkillMeta {
   version?: string;
 }
 
+export interface SkillLock {
+  originUrl: string;
+  repoUrl: string;
+  subdirectory: string;
+  branch: string;
+  pinnedCommit: string;
+  fetchedAt: string;
+}
+
+export interface ParsedSkillUrl {
+  repoUrl: string;
+  subdirectory: string;
+  branch: string;
+  originUrl: string;
+}
+
 export interface Skill {
   name: string;
   meta: SkillMeta;
   instructions: string;
   sourcePath: string;
-  source: "project" | "user";
+  source: "project" | "user" | "remote";
+  lock?: SkillLock;
 }
 
 // Minimal line-by-line YAML parser — handles key: value pairs and list values under allowedTools.
@@ -64,13 +81,38 @@ function userSkillsDir(): string {
   return path.join(os.homedir(), ".vi", "skills");
 }
 
-function loadSkillFromDir(skillDir: string, name: string, source: "project" | "user"): Skill | null {
+export function readSkillLock(skillDir: string): SkillLock | null {
+  const lockPath = path.join(skillDir, ".skill-lock.json");
+  if (!fs.existsSync(lockPath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(lockPath, "utf8")) as SkillLock;
+  } catch {
+    return null;
+  }
+}
+
+export function writeSkillLock(skillDir: string, lock: SkillLock): void {
+  fs.writeFileSync(path.join(skillDir, ".skill-lock.json"), JSON.stringify(lock, null, 2) + "\n");
+}
+
+export function parseSkillUrl(rawUrl: string): ParsedSkillUrl {
+  // GitHub tree URL: https://github.com/org/repo/tree/<branch>/path/to/skill
+  const githubTree = rawUrl.match(/^(https:\/\/github\.com\/[^/]+\/[^/]+)\/tree\/([^/]+)\/(.+)$/);
+  if (githubTree) {
+    return { repoUrl: githubTree[1], branch: githubTree[2], subdirectory: githubTree[3], originUrl: rawUrl };
+  }
+  // Plain repo URL (GitHub, GitLab, SSH, etc.) — skill expected at repo root
+  return { repoUrl: rawUrl, branch: "HEAD", subdirectory: ".", originUrl: rawUrl };
+}
+
+function loadSkillFromDir(skillDir: string, name: string, baseSource: "project" | "user"): Skill | null {
   const yamlPath = path.join(skillDir, "skill.yaml");
   const instructionsPath = path.join(skillDir, "instructions.md");
   if (!fs.existsSync(yamlPath) || !fs.existsSync(instructionsPath)) return null;
 
   const raw = parseSkillYaml(fs.readFileSync(yamlPath, "utf8"));
   const instructions = fs.readFileSync(instructionsPath, "utf8");
+  const lock = readSkillLock(skillDir);
 
   return {
     name,
@@ -82,7 +124,8 @@ function loadSkillFromDir(skillDir: string, name: string, source: "project" | "u
     },
     instructions,
     sourcePath: skillDir,
-    source,
+    source: lock ? "remote" : baseSource,
+    lock: lock ?? undefined,
   };
 }
 
@@ -105,8 +148,8 @@ export function resolveSkill(skillName: string): Skill | null {
   return null;
 }
 
-export function listSkills(): Array<{ name: string; source: "project" | "user"; description?: string }> {
-  const results: Array<{ name: string; source: "project" | "user"; description?: string }> = [];
+export function listSkills(): Array<{ name: string; source: "project" | "user" | "remote"; description?: string }> {
+  const results: Array<{ name: string; source: "project" | "user" | "remote"; description?: string }> = [];
   const seen = new Set<string>();
 
   const projectDir = findProjectSkillsDir();
@@ -115,7 +158,7 @@ export function listSkills(): Array<{ name: string; source: "project" | "user"; 
       if (!entry.isDirectory() || seen.has(entry.name)) continue;
       seen.add(entry.name);
       const skill = loadSkillFromDir(path.join(projectDir, entry.name), entry.name, "project");
-      results.push({ name: entry.name, source: "project", description: skill?.meta.description });
+      results.push({ name: entry.name, source: skill?.source ?? "project", description: skill?.meta.description });
     }
   }
 
@@ -125,7 +168,7 @@ export function listSkills(): Array<{ name: string; source: "project" | "user"; 
       if (!entry.isDirectory() || seen.has(entry.name)) continue;
       seen.add(entry.name);
       const skill = loadSkillFromDir(path.join(uDir, entry.name), entry.name, "user");
-      results.push({ name: entry.name, source: "user", description: skill?.meta.description });
+      results.push({ name: entry.name, source: skill?.source ?? "user", description: skill?.meta.description });
     }
   }
 
