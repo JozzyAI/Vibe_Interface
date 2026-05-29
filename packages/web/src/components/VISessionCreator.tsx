@@ -15,6 +15,14 @@ interface Props {
   claudeDefaultModel?: string;
 }
 
+interface SkillEntry {
+  name: string;
+  description: string | null;
+  allowedTools: string[] | null;
+  instructions: string;
+  source: "project" | "user";
+}
+
 async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     headers: { "Content-Type": "application/json" },
@@ -114,6 +122,10 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // Skill selector
+  const [skills, setSkills] = useState<SkillEntry[]>([]);
+  const [selectedSkill, setSelectedSkill] = useState("");
+
   // Folder browser state
   const [browseOpen, setBrowseOpen] = useState(false);
   const [browsePath, setBrowsePath] = useState<string | null>(null);
@@ -124,6 +136,13 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
   const [showNewFolder, setShowNewFolder] = useState(false);
 
   useOverviewPolling({ level: 1, onData: setOverview });
+
+  useEffect(() => {
+    void fetch("/api/vi/skills", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() as Promise<SkillEntry[]> : Promise.resolve([]))
+      .then(setSkills)
+      .catch(() => { /* skills are optional — silently ignore errors */ });
+  }, []);
 
   const connectedMachines = useMemo(
     () => overview.agents.filter((agent) => agent.connectionState === "connected"),
@@ -202,6 +221,13 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
           if (!selectedAgent) throw new Error("Connect a machine first");
           if (!cleanPrompt) throw new Error("Initial prompt is required");
 
+          const skill = skills.find((s) => s.name === selectedSkill);
+          // When a skill is selected, inject [SKILL: name] + instructions before the user goal.
+          // The VI session context (workspace, permissions, etc.) stays above; skill + goal go at the end.
+          const composedPrompt = skill
+            ? `[SKILL: ${skill.name}]\n${skill.instructions.trimEnd()}\n\n--- Goal ---\n${cleanPrompt}`
+            : cleanPrompt;
+
           const cwd = workspace.trim() || defaultWorkspace(workspaceRoot, cleanPrompt, effectiveTitle);
           await requestJson("/api/remote-agents/policy", {
             method: "POST",
@@ -241,7 +267,7 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
                 "",
                 "Use VI approval flow for risky operations. Keep work scoped to this session.",
                 "",
-                cleanPrompt,
+                composedPrompt,
               ].join("\n"),
               env: {
                 VI_SESSION_TITLE: effectiveTitle,
@@ -589,6 +615,32 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
             ) : null}
           </div>
         </div>
+
+        {skills.length > 0 ? (
+          <div className="mt-4 grid gap-1">
+            <label className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+              Skill <span className="normal-case tracking-normal opacity-50">(optional)</span>
+            </label>
+            <select
+              value={selectedSkill}
+              onChange={(event) => setSelectedSkill(event.currentTarget.value)}
+              className="rounded-2xl border border-[var(--color-border-default)] bg-[#f7f7f6] px-4 py-3 text-[13px] text-[#1e2026]"
+            >
+              <option value="">None — no skill context</option>
+              {skills.map((s) => (
+                <option key={s.name} value={s.name}>
+                  {s.name}{s.source === "project" ? " (project)" : ""}
+                  {s.description ? ` — ${s.description}` : ""}
+                </option>
+              ))}
+            </select>
+            {selectedSkill && skills.find((s) => s.name === selectedSkill)?.description ? (
+              <p className="text-[12px] text-[var(--color-text-tertiary)]">
+                {skills.find((s) => s.name === selectedSkill)?.description}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-4 grid gap-1">
           <label className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
