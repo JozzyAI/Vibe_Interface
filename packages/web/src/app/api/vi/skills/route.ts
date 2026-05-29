@@ -9,7 +9,7 @@ interface SkillEntry {
   description: string | null;
   allowedTools: string[] | null;
   instructions: string;
-  source: "project" | "user";
+  source: "project" | "user" | "remote";
 }
 
 // Minimal line-by-line YAML parser — handles the skill.yaml subset only.
@@ -37,20 +37,21 @@ function parseSkillYaml(text: string): Record<string, unknown> {
   return result;
 }
 
-function loadSkill(skillDir: string, name: string, source: "project" | "user"): SkillEntry | null {
+function loadSkill(skillDir: string, name: string, baseSource: "project" | "user"): SkillEntry | null {
   const yamlPath = path.join(skillDir, "skill.yaml");
   const instructionsPath = path.join(skillDir, "instructions.md");
   if (!fs.existsSync(yamlPath) || !fs.existsSync(instructionsPath)) return null;
 
   const raw = parseSkillYaml(fs.readFileSync(yamlPath, "utf8"));
   const instructions = fs.readFileSync(instructionsPath, "utf8");
+  const hasLock = fs.existsSync(path.join(skillDir, ".skill-lock.json"));
 
   return {
     name,
     description: (raw["description"] as string) || null,
     allowedTools: (raw["allowedTools"] as string[]) || null,
     instructions,
-    source,
+    source: hasLock ? "remote" : baseSource,
   };
 }
 

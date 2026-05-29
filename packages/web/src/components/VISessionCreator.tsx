@@ -20,7 +20,7 @@ interface SkillEntry {
   description: string | null;
   allowedTools: string[] | null;
   instructions: string;
-  source: "project" | "user";
+  source: "project" | "user" | "remote";
 }
 
 async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -124,7 +124,8 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
 
   // Skill selector
   const [skills, setSkills] = useState<SkillEntry[]>([]);
-  const [selectedSkill, setSelectedSkill] = useState("");
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [skillPickerValue, setSkillPickerValue] = useState("");
 
   // Folder browser state
   const [browseOpen, setBrowseOpen] = useState(false);
@@ -221,11 +222,13 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
           if (!selectedAgent) throw new Error("Connect a machine first");
           if (!cleanPrompt) throw new Error("Initial prompt is required");
 
-          const skill = skills.find((s) => s.name === selectedSkill);
-          // When a skill is selected, inject [SKILL: name] + instructions before the user goal.
-          // The VI session context (workspace, permissions, etc.) stays above; skill + goal go at the end.
-          const composedPrompt = skill
-            ? `[SKILL: ${skill.name}]\n${skill.instructions.trimEnd()}\n\n--- Goal ---\n${cleanPrompt}`
+          const activeSkills = selectedSkills
+            .map((name) => skills.find((s) => s.name === name))
+            .filter((s): s is SkillEntry => s !== undefined);
+          const composedPrompt = activeSkills.length > 0
+            ? activeSkills
+                .map((s) => `[SKILL: ${s.name}]\n${s.instructions.trimEnd()}`)
+                .join("\n\n---\n\n") + `\n\n--- Goal ---\n${cleanPrompt}`
             : cleanPrompt;
 
           const cwd = workspace.trim() || defaultWorkspace(workspaceRoot, cleanPrompt, effectiveTitle);
@@ -617,27 +620,62 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
         </div>
 
         {skills.length > 0 ? (
-          <div className="mt-4 grid gap-1">
+          <div className="mt-4 grid gap-2">
             <label className="text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
-              Skill <span className="normal-case tracking-normal opacity-50">(optional)</span>
+              Skills <span className="normal-case tracking-normal opacity-50">(optional)</span>
             </label>
-            <select
-              value={selectedSkill}
-              onChange={(event) => setSelectedSkill(event.currentTarget.value)}
-              className="rounded-2xl border border-[var(--color-border-default)] bg-[#f7f7f6] px-4 py-3 text-[13px] text-[#1e2026]"
-            >
-              <option value="">None — no skill context</option>
-              {skills.map((s) => (
-                <option key={s.name} value={s.name}>
-                  {s.name}{s.source === "project" ? " (project)" : ""}
-                  {s.description ? ` — ${s.description}` : ""}
+            {/* Chip list — selected skills */}
+            {selectedSkills.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {selectedSkills.map((name) => {
+                  const s = skills.find((sk) => sk.name === name);
+                  return (
+                    <span
+                      key={name}
+                      className="flex items-center gap-1.5 rounded-full border border-[var(--color-accent)] bg-[var(--color-accent-subtle)] px-3 py-1 text-[12px] font-semibold text-[var(--color-accent)]"
+                    >
+                      {name}
+                      {s?.source === "project" ? <span className="opacity-50">(project)</span> : null}
+                      {s?.source === "remote" ? <span className="opacity-50">(remote)</span> : null}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSkills((prev) => prev.filter((n) => n !== name))}
+                        className="ml-0.5 text-[10px] leading-none opacity-60 hover:opacity-100"
+                        aria-label={`Remove skill ${name}`}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            ) : null}
+            {/* Add-skill dropdown — only show skills not yet selected */}
+            {skills.filter((s) => !selectedSkills.includes(s.name)).length > 0 ? (
+              <select
+                value={skillPickerValue}
+                onChange={(event) => {
+                  const name = event.currentTarget.value;
+                  if (name && !selectedSkills.includes(name)) {
+                    setSelectedSkills((prev) => [...prev, name]);
+                  }
+                  setSkillPickerValue("");
+                }}
+                className="rounded-2xl border border-[var(--color-border-default)] bg-[#f7f7f6] px-4 py-3 text-[13px] text-[#1e2026]"
+              >
+                <option value="">
+                  {selectedSkills.length === 0 ? "Add a skill..." : "Add another skill..."}
                 </option>
-              ))}
-            </select>
-            {selectedSkill && skills.find((s) => s.name === selectedSkill)?.description ? (
-              <p className="text-[12px] text-[var(--color-text-tertiary)]">
-                {skills.find((s) => s.name === selectedSkill)?.description}
-              </p>
+                {skills
+                  .filter((s) => !selectedSkills.includes(s.name))
+                  .map((s) => (
+                    <option key={s.name} value={s.name}>
+                      {s.name}
+                      {s.source === "project" ? " (project)" : s.source === "remote" ? " (remote)" : ""}
+                      {s.description ? ` — ${s.description}` : ""}
+                    </option>
+                  ))}
+              </select>
             ) : null}
           </div>
         ) : null}
