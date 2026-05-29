@@ -95,7 +95,8 @@ async function fetchSourceSkills(source: typeof CURATED_SOURCES[0]): Promise<Rem
   const candidates: RemoteSkillCandidate[] = [];
 
   for (const entry of contents) {
-    if (entry.type !== "dir" || SKIP_DIRS.has(entry.name)) continue;
+    // Skip known non-skill dirs and all dotfile dirs (.claude, .claude-plugin, .codex, etc.)
+    if (entry.type !== "dir" || SKIP_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
 
     const riskNotes: string[] = [];
     if (isStale) riskNotes.push("repo last updated > 1 year ago");
