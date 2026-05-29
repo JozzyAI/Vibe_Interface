@@ -22,6 +22,7 @@ export type PollingLevel = 1 | 2 | 3;
 export interface UseOverviewPollingOptions {
   level: PollingLevel;
   enabled?: boolean;
+  slim?: boolean;         // strip logTail server-side (?nologs=1) — use for list pages
   jobStatus?: string;     // job.status: used by level 2 to adapt interval
   providerState?: string; // job.providerState?.state: used by level 2
   onData: (overview: RemoteApprovalOverview) => void;
@@ -48,6 +49,7 @@ function intervalMs(
 export function useOverviewPolling({
   level,
   enabled = true,
+  slim = false,
   jobStatus,
   providerState,
   onData,
@@ -55,6 +57,7 @@ export function useOverviewPolling({
 }: UseOverviewPollingOptions): void {
   // All mutable options live in refs so the loop closure never goes stale
   const levelRef = useRef(level);
+  const slimRef = useRef(slim);
   const jobStatusRef = useRef(jobStatus);
   const providerStateRef = useRef(providerState);
   const enabledRef = useRef(enabled);
@@ -62,6 +65,7 @@ export function useOverviewPolling({
   const onErrorRef = useRef(onError);
 
   levelRef.current = level;
+  slimRef.current = slim;
   jobStatusRef.current = jobStatus;
   providerStateRef.current = providerState;
   enabledRef.current = enabled;
@@ -83,7 +87,10 @@ export function useOverviewPolling({
       }
 
       try {
-        const res = await fetch("/api/remote-agents/overview", { cache: "no-store" });
+        const url = slimRef.current
+          ? "/api/remote-agents/overview?nologs=1"
+          : "/api/remote-agents/overview";
+        const res = await fetch(url, { cache: "no-store" });
         if (cancelled) return;
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as RemoteApprovalOverview;

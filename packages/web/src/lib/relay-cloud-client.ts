@@ -6,11 +6,17 @@
 import "server-only";
 import { VIRelayClient } from "@vi/client-sdk";
 
-function makeClient() {
-  return new VIRelayClient({
-    baseUrl: (process.env["VI_RELAY_BASE_URL"] ?? "").trim(),
-    viToken: process.env["VI_RELAY_VI_TOKEN"] ?? "",
-  });
+// Module-level singleton — reuses the same TCP connection across all requests
+// in the same Next.js server process, eliminating per-request DNS lookups.
+let _client: VIRelayClient | null = null;
+function makeClient(): VIRelayClient {
+  if (!_client) {
+    _client = new VIRelayClient({
+      baseUrl: (process.env["VI_RELAY_BASE_URL"] ?? "").trim(),
+      viToken: process.env["VI_RELAY_VI_TOKEN"] ?? "",
+    });
+  }
+  return _client;
 }
 
 // Re-export every method as a standalone async function to preserve

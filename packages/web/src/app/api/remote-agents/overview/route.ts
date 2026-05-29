@@ -9,15 +9,27 @@ let cachedOverview: { value: RemoteApprovalOverview; expiresAt: number } | null 
 // Deduplicate concurrent in-flight requests (thundering herd guard)
 let inFlight: Promise<RemoteApprovalOverview> | null = null;
 
+// Warm the relay connection + cache as soon as this module loads so the first
+// user-triggered request hits the 2s cache instead of a cold relay round-trip.
+void (async () => {
+  try {
+    const { getRemoteApprovalOverview } = await getRemoteAgentsBackend();
+    const value = await getRemoteApprovalOverview();
+    cachedOverview = { value, expiresAt: Date.now() + OVERVIEW_CACHE_MS };
+  } catch { /* non-fatal — first real request will populate the cache */ }
+})();
+
 export async function GET(request: NextRequest) {
   const correlationId = getCorrelationId(request);
   try {
     const now = Date.now();
     // ?bust=1 skips cache — used by post-action refreshes (approve, reject, archive)
-    // so the UI reflects the write immediately, not a stale 2s window.
     const bust = request.nextUrl.searchParams.get("bust") === "1";
+    // ?nologs=1 strips logTail from all jobs — used by list pages that don't display logs
+    const nologs = request.nextUrl.searchParams.get("nologs") === "1";
     if (!bust && cachedOverview && cachedOverview.expiresAt > now) {
-      return jsonWithCorrelation(cachedOverview.value, { status: 200 }, correlationId);
+      const value = nologs ? stripLogs(cachedOverview.value) : cachedOverview.value;
+      return jsonWithCorrelation(value, { status: 200 }, correlationId);
     }
     const { getRemoteApprovalOverview } = await getRemoteAgentsBackend();
     if (!inFlight) {
@@ -29,7 +41,8 @@ export async function GET(request: NextRequest) {
         .finally(() => { inFlight = null; });
     }
     const overview = await inFlight;
-    return jsonWithCorrelation(overview, { status: 200 }, correlationId);
+    const result = nologs ? stripLogs(overview) : overview;
+    return jsonWithCorrelation(result, { status: 200 }, correlationId);
   } catch (error) {
     return jsonWithCorrelation(
       { error: error instanceof Error ? error.message : "Failed to load remote agent overview" },
@@ -37,4 +50,11 @@ export async function GET(request: NextRequest) {
       correlationId,
     );
   }
+}
+
+function stripLogs(overview: RemoteApprovalOverview): RemoteApprovalOverview {
+  return {
+    ...overview,
+    jobs: overview.jobs.map(({ logTail: _, ...job }) => job),
+  };
 }

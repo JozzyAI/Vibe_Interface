@@ -206,7 +206,7 @@ export function VIIdeaBoard({
     return () => clearInterval(id);
   }, [boardUrl]);
 
-  useOverviewPolling({ level: 1, onData: setRemoteOverview });
+  useOverviewPolling({ level: 1, slim: true, onData: setRemoteOverview });
 
   const connectedAgents = useMemo(
     () =>

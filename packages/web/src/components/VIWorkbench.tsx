@@ -105,7 +105,7 @@ export function VIWorkbench({
   const [isPending, startTransition] = useTransition();
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
-  useOverviewPolling({ level: 1, onData: setRemoteOverview });
+  useOverviewPolling({ level: 1, slim: true, onData: setRemoteOverview });
 
   const connectedAgents = useMemo(
     () => remoteOverview.agents.filter((agent) => agent.connectionState === "connected"),
