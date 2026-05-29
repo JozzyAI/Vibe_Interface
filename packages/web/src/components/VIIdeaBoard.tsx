@@ -9,6 +9,7 @@ import type {
   RemoteAgentSummary,
   RemoteApprovalOverview,
 } from "@/lib/types";
+import { useOverviewPolling } from "@/hooks/useOverviewPolling";
 
 interface Props {
   initialData?: VIIdeaBoardData;
@@ -199,13 +200,13 @@ export function VIIdeaBoard({
     setMarkdown(selectedIdea.markdown);
   }, [selectedIdea]);
 
+  // Board data (local API) keeps its own interval; overview uses shared hook
   useEffect(() => {
-    const interval = setInterval(() => {
-      void refresh().catch(() => void 0);
-      void refreshRemoteOverview().catch(() => void 0);
-    }, 15000);
-    return () => clearInterval(interval);
+    const id = setInterval(() => void refresh().catch(() => void 0), 15_000);
+    return () => clearInterval(id);
   }, [boardUrl]);
+
+  useOverviewPolling({ level: 1, onData: setRemoteOverview });
 
   const connectedAgents = useMemo(
     () =>

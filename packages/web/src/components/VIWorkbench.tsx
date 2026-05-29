@@ -11,6 +11,7 @@ import type {
   RemoteApprovalOverview,
 } from "@/lib/types";
 import type { ProjectInfo } from "@/lib/project-name";
+import { useOverviewPolling } from "@/hooks/useOverviewPolling";
 
 interface Props {
   initialSessions: DashboardSession[];
@@ -104,14 +105,7 @@ export function VIWorkbench({
   const [isPending, startTransition] = useTransition();
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      void requestJson<RemoteApprovalOverview>("/api/remote-agents/overview")
-        .then(setRemoteOverview)
-        .catch(() => void 0);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  useOverviewPolling({ level: 1, onData: setRemoteOverview });
 
   const connectedAgents = useMemo(
     () => remoteOverview.agents.filter((agent) => agent.connectionState === "connected"),

@@ -11,6 +11,7 @@ import type {
 import Link from "next/link";
 import { DirectTerminal } from "./DirectTerminal";
 import { RemoteLogTerminal } from "./RemoteLogTerminal";
+import { useOverviewPolling } from "@/hooks/useOverviewPolling";
 
 interface Props {
   jobId: string;
@@ -513,23 +514,21 @@ export function VIRemoteSessionDetail({ jobId, initialOverview }: Props) {
     !codexRestartRequired &&
     !providerHeartbeatFailed;
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      void requestJson<RemoteApprovalOverview>("/api/remote-agents/overview")
-        .then(setOverview)
-        .catch((nextError) =>
-          setError(nextError instanceof Error ? nextError.message : "Failed to refresh remote session"),
-        );
-    }, 500);
-    return () => clearInterval(interval);
-  }, []);
+  // Level 2 polling: adapts to session state — busy=2s, waiting=5s, terminal=15s
+  useOverviewPolling({
+    level: 2,
+    jobStatus: job?.status,
+    providerState: job?.providerState?.state,
+    onData: setOverview,
+    onError: (msg) => setError(msg),
+  });
 
   const respond = async (request: RemoteApprovalRequest, action: "approve" | "reject") => {
     await requestJson("/api/remote-agents/requests/respond", {
       method: "POST",
       body: JSON.stringify({ requestId: request.requestId, action }),
     });
-    setOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview"));
+    setOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview?bust=1"));
   };
 
   const sendTerminalInput = async (
@@ -552,7 +551,7 @@ export function VIRemoteSessionDetail({ jobId, initialOverview }: Props) {
         }),
       });
       setTerminalInput("");
-      setOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview"));
+      setOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview?bust=1"));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Failed to send remote input");
     } finally {
@@ -656,7 +655,7 @@ export function VIRemoteSessionDetail({ jobId, initialOverview }: Props) {
           ...next,
         }),
       });
-      setOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview"));
+      setOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview?bust=1"));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Failed to update session setting");
     } finally {
@@ -1196,16 +1195,7 @@ export function VIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
     setSelectedReasoningEffort(job?.reasoningEffort ?? "");
   }, [job?.jobId, job?.model, job?.reasoningEffort, isClaudeJob]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      void requestJson<RemoteApprovalOverview>("/api/remote-agents/overview")
-        .then(setOverview)
-        .catch((nextError) =>
-          setError(nextError instanceof Error ? nextError.message : "Failed to refresh session info"),
-        );
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // Overview polling handled by useOverviewPolling above (level 2 — one interval only)
 
   useEffect(() => {
     if (continueAgentId && connectedMachines.some((entry) => entry.agentId === continueAgentId)) return;
@@ -1227,7 +1217,7 @@ export function VIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
           ...next,
         }),
       });
-      setOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview"));
+      setOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview?bust=1"));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Failed to update setting");
     } finally {
@@ -1249,7 +1239,7 @@ export function VIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
           reasoningEffort: selectedReasoningEffort || null,
         }),
       });
-      const nextOverview = await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview");
+      const nextOverview = await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview?bust=1");
       setOverview(nextOverview);
       return nextOverview;
     } catch (nextError) {
@@ -1343,7 +1333,7 @@ export function VIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
           timeoutSeconds: agent.timeoutSeconds,
         }),
       });
-      setOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview"));
+      setOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview?bust=1"));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Failed to update permission");
     } finally {
@@ -1461,7 +1451,7 @@ export function VIRemoteSessionSidePanel({ jobId, initialOverview }: Props) {
       await requestJson(`/api/remote-agents/agents/${encodeURIComponent(agent.agentId)}/restart-daemon`, {
         method: "POST",
       });
-      setOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview"));
+      setOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview?bust=1"));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Failed to restart daemon");
     } finally {

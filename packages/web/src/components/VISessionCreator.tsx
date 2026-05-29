@@ -7,6 +7,7 @@ import type {
   RemoteAgentSummary,
   RemoteApprovalOverview,
 } from "@/lib/types";
+import { useOverviewPolling } from "@/hooks/useOverviewPolling";
 
 interface Props {
   initialRemoteOverview: RemoteApprovalOverview;
@@ -122,14 +123,7 @@ export function VISessionCreator({ initialRemoteOverview, workspaceRoot, claudeD
   const [newFolderName, setNewFolderName] = useState("");
   const [showNewFolder, setShowNewFolder] = useState(false);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      void requestJson<RemoteApprovalOverview>("/api/remote-agents/overview")
-        .then(setOverview)
-        .catch(() => void 0);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  useOverviewPolling({ level: 1, onData: setOverview });
 
   const connectedMachines = useMemo(
     () => overview.agents.filter((agent) => agent.connectionState === "connected"),

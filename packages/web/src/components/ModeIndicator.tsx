@@ -42,16 +42,13 @@ export function ModeIndicator() {
   useEffect(() => {
     if (!config) return;
 
+    // HEAD request — only need status code, not body
     const check = async () => {
       try {
-        const res = await fetch("/api/remote-agents/overview", { cache: "no-store" });
+        const res = await fetch("/api/remote-agents/overview", { method: "HEAD", cache: "no-store" });
         if (res.ok) {
           setStatus("connected");
-          return;
-        }
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        const msg = (body.error ?? "").toLowerCase();
-        if (res.status === 401 || res.status === 403 || msg.includes("401") || msg.includes("403") || msg.includes("auth")) {
+        } else if (res.status === 401 || res.status === 403) {
           setStatus("auth-failed");
         } else {
           setStatus("disconnected");
@@ -62,7 +59,7 @@ export function ModeIndicator() {
     };
 
     check();
-    const id = setInterval(check, 20_000);
+    const id = setInterval(check, 60_000);
     return () => clearInterval(id);
   }, [config]);
 

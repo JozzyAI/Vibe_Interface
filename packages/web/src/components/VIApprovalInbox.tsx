@@ -13,6 +13,7 @@ import type {
   RemoteApprovalOverview,
   RemoteApprovalRequest,
 } from "@/lib/types";
+import { useOverviewPolling } from "@/hooks/useOverviewPolling";
 
 export interface ApprovalInboxProjectCardData {
   projectId: string;
@@ -217,11 +218,39 @@ export function VIApprovalInbox({ initialCards, initialRemoteOverview, hideSumma
     );
   };
 
+  // Overview polling via shared hook (level 1 — 8s, no relay call duplication)
+  useOverviewPolling({
+    level: 1,
+    onData: (nextOverview) => {
+      setRemoteOverview((current) =>
+        current.jobs.length > 0 && nextOverview.jobs.length === 0
+          ? { ...nextOverview, jobs: current.jobs, requests: current.requests }
+          : nextOverview,
+      );
+    },
+  });
+
+  // Per-project hub data is local API (cheap) — keep its own 5s interval
   useEffect(() => {
-    const interval = setInterval(() => {
-      void refreshAll().catch(() => void 0);
-    }, 5000);
-    return () => clearInterval(interval);
+    const refresh = () => {
+      void Promise.all(
+        cards.map(async (card) => ({
+          ...card,
+          hub: await requestJson<VIApprovalHubData>(
+            `/api/vi/approval-hub?project=${encodeURIComponent(card.projectId)}`,
+          ),
+        })),
+      )
+        .then((nextCards) => {
+          const currentCount = cards.reduce((n, c) => n + c.hub.fleet.length, 0);
+          const nextCount = nextCards.reduce((n, c) => n + c.hub.fleet.length, 0);
+          if (currentCount > 0 && nextCount === 0) return;
+          setCards(nextCards);
+        })
+        .catch(() => void 0);
+    };
+    const id = setInterval(refresh, 5_000);
+    return () => clearInterval(id);
   }, [cards]);
 
   const updateCard = (projectId: string, hub: VIApprovalHubData) => {
@@ -412,7 +441,7 @@ export function VIApprovalInbox({ initialCards, initialRemoteOverview, hideSumma
               timeoutSeconds: agent.timeoutSeconds,
             }),
           });
-          setRemoteOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview"));
+          setRemoteOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview?bust=1"));
         } catch (nextError) {
           setError(nextError instanceof Error ? nextError.message : "Failed to switch remote approval mode");
         }
@@ -443,7 +472,7 @@ export function VIApprovalInbox({ initialCards, initialRemoteOverview, hideSumma
             method: "POST",
             body: JSON.stringify({ requestId: request.requestId, action }),
           });
-          setRemoteOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview"));
+          setRemoteOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview?bust=1"));
         } catch (nextError) {
           setError(nextError instanceof Error ? nextError.message : "Failed to respond to remote approval");
         }
@@ -459,7 +488,7 @@ export function VIApprovalInbox({ initialCards, initialRemoteOverview, hideSumma
             method: "POST",
             body: JSON.stringify({ agentId: item.agent.agentId }),
           });
-          setRemoteOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview"));
+          setRemoteOverview(await requestJson<RemoteApprovalOverview>("/api/remote-agents/overview?bust=1"));
         } catch (nextError) {
           setError(nextError instanceof Error ? nextError.message : "Failed to archive remote session");
         }

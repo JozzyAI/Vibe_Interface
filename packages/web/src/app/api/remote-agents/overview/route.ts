@@ -3,30 +3,34 @@ import { jsonWithCorrelation, getCorrelationId } from "@/lib/observability";
 import { getRemoteAgentsBackend } from "@/lib/backend";
 import type { RemoteApprovalOverview } from "@/lib/types";
 
-const OVERVIEW_CACHE_MS = 500;
+// 2s coalescing window — long enough to absorb concurrent pollers, short enough to feel live
+const OVERVIEW_CACHE_MS = 2_000;
 let cachedOverview: { value: RemoteApprovalOverview; expiresAt: number } | null = null;
+// Deduplicate concurrent in-flight requests (thundering herd guard)
+let inFlight: Promise<RemoteApprovalOverview> | null = null;
 
 export async function GET(request: NextRequest) {
   const correlationId = getCorrelationId(request);
-  const t0 = Date.now();
   try {
     const now = Date.now();
+    // ?bust=1 skips cache — used by post-action refreshes (approve, reject, archive)
+    // so the UI reflects the write immediately, not a stale 2s window.
+    const bust = request.nextUrl.searchParams.get("bust") === "1";
+    if (!bust && cachedOverview && cachedOverview.expiresAt > now) {
+      return jsonWithCorrelation(cachedOverview.value, { status: 200 }, correlationId);
+    }
     const { getRemoteApprovalOverview } = await getRemoteAgentsBackend();
-    let cacheHit = false;
-    const overview =
-      cachedOverview && cachedOverview.expiresAt > now
-        ? (cacheHit = true, cachedOverview.value)
-        : await getRemoteApprovalOverview().then((value) => {
-            cachedOverview = { value, expiresAt: now + OVERVIEW_CACHE_MS };
-            return value;
-          });
-    const elapsed = Date.now() - t0;
-    console.log(
-      `[overview-route] ${elapsed}ms cache=${cacheHit} agents=${overview.agents.length} jobs=${overview.jobs.length} requests=${overview.requests.length} enrollments=${overview.enrollments.length}`,
-    );
+    if (!inFlight) {
+      inFlight = getRemoteApprovalOverview()
+        .then((value) => {
+          cachedOverview = { value, expiresAt: Date.now() + OVERVIEW_CACHE_MS };
+          return value;
+        })
+        .finally(() => { inFlight = null; });
+    }
+    const overview = await inFlight;
     return jsonWithCorrelation(overview, { status: 200 }, correlationId);
   } catch (error) {
-    console.log(`[overview-route] ERROR ${Date.now() - t0}ms ${error instanceof Error ? error.message : error}`);
     return jsonWithCorrelation(
       { error: error instanceof Error ? error.message : "Failed to load remote agent overview" },
       { status: 500 },
