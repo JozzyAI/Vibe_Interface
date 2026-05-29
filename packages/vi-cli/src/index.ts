@@ -5,6 +5,7 @@ import { registerOverviewCommand } from "./commands/overview.js";
 import { registerMachinesCommand } from "./commands/machines.js";
 import { registerSessionCommands } from "./commands/sessions.js";
 import { registerApprovalsCommand } from "./commands/approvals.js";
+import { registerSkillsCommands } from "./commands/skills.js";
 import { exit, ExitCode } from "./exit.js";
 
 const program = new Command();
@@ -34,6 +35,7 @@ registerOverviewCommand(program);
 registerMachinesCommand(program);
 registerSessionCommands(program);
 registerApprovalsCommand(program);
+registerSkillsCommands(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   exit(ExitCode.USER_ERROR, err instanceof Error ? err.message : String(err));

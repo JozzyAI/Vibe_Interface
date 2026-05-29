@@ -3,6 +3,7 @@ import type { RemoteAgentJob } from "@vi/client-sdk";
 import { getClient } from "../client.js";
 import { withRelay, exit, guardReadOnly, ExitCode } from "../exit.js";
 import { printTable, printJson, ago, short } from "../format.js";
+import { resolveSkill, composeGoal } from "../skill.js";
 
 export function registerSessionCommands(program: Command): void {
   // vi sessions
@@ -56,6 +57,7 @@ export function registerSessionCommands(program: Command): void {
     .option("--goal <text>", "Initial prompt — injected as /goal after startup, not a positional arg")
     .option("--model <model>", "Claude model override (e.g. claude-opus-4-7)")
     .option("--title <title>", "Session title shown in the dashboard")
+    .option("--skill <name>", "Inject a skill pack as initial prompt context (see: vi skills list)")
     .option("--json", "Output the created job as JSON")
     .action(
       async (opts: {
@@ -64,6 +66,7 @@ export function registerSessionCommands(program: Command): void {
         goal?: string;
         model?: string;
         title?: string;
+        skill?: string;
         json?: boolean;
       }) => {
         guardReadOnly();
@@ -82,9 +85,20 @@ export function registerSessionCommands(program: Command): void {
 
         const title = opts.title?.trim() || "Start Claude Code via bridge";
 
+        // Compose VI_INITIAL_GOAL: inject skill pack when --skill is given,
+        // otherwise pass goal as-is (no-skill path is byte-for-byte identical).
+        let initialGoal: string | undefined = opts.goal?.trim();
+        if (opts.skill) {
+          const skill = resolveSkill(opts.skill);
+          if (!skill) {
+            exit(ExitCode.NOT_FOUND, `skill not found: ${opts.skill}`);
+          }
+          initialGoal = composeGoal(skill, opts.goal);
+        }
+
         // Goal goes in env — never as a positional arg (that triggers one-shot exit)
         const env: Record<string, string> = { VI_SESSION_TITLE: title };
-        if (opts.goal?.trim()) env["VI_INITIAL_GOAL"] = opts.goal.trim();
+        if (initialGoal) env["VI_INITIAL_GOAL"] = initialGoal;
 
         const job = await withRelay(() =>
           getClient().createRemoteAgentJob({
